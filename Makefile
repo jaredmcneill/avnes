@@ -1,5 +1,5 @@
 PROG=	avnes
-OBJS=	cpu.o ppu.o sdl.o main.o
+OBJS=	cpu.o ppu.o sdl.o main.o mapper.o mapper_nrom.o
 
 CC=	cc
 

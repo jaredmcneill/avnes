@@ -46,8 +46,8 @@
         } while (0)
 
 #define	PPU_NREG	8
-#define	PPU_VRAM_SIZE	0x4000
 #define	PPU_OAM_SIZE	0x100
+#define	PPU_MEMMAP_SIZE	0x4000
 
 #define	PPU_WIDTH	256
 #define	PPU_HEIGHT	240
@@ -65,7 +65,6 @@ struct ppu_pixel {
 struct ppu_context {
 	struct cpu_context *c;
 	uint8_t	regs[PPU_NREG];
-	uint8_t	vram[PPU_VRAM_SIZE];
 	uint16_t vramaddr;
 	uint8_t oam[PPU_OAM_SIZE];
 	uint8_t oamaddr;
@@ -90,9 +89,11 @@ struct ppu_context {
 	unsigned int draw_cycles;
 	int clear_s0;
 	void (*draw)(struct ppu_context *);
+	uint8_t (*read8)(uint16_t);
+	void (*write8)(uint16_t, uint8_t);
 };
 
-int	ppu_init(struct ppu_context *, struct cpu_context *, uint8_t);
+int	ppu_init(struct ppu_context *);
 uint8_t	ppu_read(struct ppu_context *, uint16_t);
 void	ppu_write(struct ppu_context *, uint16_t, uint8_t);
 int	ppu_step(struct ppu_context *);

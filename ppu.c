@@ -64,14 +64,8 @@ static const struct timespec PPU_VBLANK_INTERVAL = {
 };
 
 int
-ppu_init(struct ppu_context *p, struct cpu_context *c, uint8_t flags)
+ppu_init(struct ppu_context *p)
 {
-	memset(p, 0, sizeof(*p));
-	p->c = c;
-	p->flags = flags;
-
-	printf("flags = %04X\n", flags);
-
 	p->latch_addr = 2;
 	p->latch_scroll = 2;
 
@@ -79,35 +73,6 @@ ppu_init(struct ppu_context *p, struct cpu_context *c, uint8_t flags)
 	timespecadd(&p->next_vblank, &PPU_VBLANK_INTERVAL);
 
 	return 0;
-}
-
-static uint16_t
-ppu_vaddr_mirror(struct ppu_context *p, uint16_t vaddr)
-{
-	if (vaddr >= 0x3000 && vaddr <= 0x3eff) {
-		vaddr -= 0x1000;
-	}	
-
-	switch (p->flags & PPU_F_MIRROR_MASK) {
-	case PPU_F_MIRROR_H:
-		/* Vertical arrangement of nametables (horizontal mirroring) */
-		if ((vaddr >= 0x2400 && vaddr <= 0x27FF) ||
-		    (vaddr >= 0x2C00 && vaddr <= 0x2FFF)) {
-			vaddr -= 0x400;
-		}
-		break;
-	case PPU_F_MIRROR_V:
-		/* Horizontal arrangement of nametables (vertical mirroring) */
-		if (vaddr >= 0x2800 && vaddr <= 0x2FFF)
-			vaddr -= 0x800;
-		break;
-	}
-
-	/* Addresses $3F10/$3F14/$3F18/$3F1C are mirrors of $3F00/$3F04/$3F08/$3F0C */
-	if (vaddr == 0x3f10 || vaddr == 0x3f14 || vaddr == 0x3f18 || vaddr == 0x3f1c)
-		vaddr -= 0x10;
-
-	return vaddr;
 }
 
 uint8_t
@@ -136,17 +101,17 @@ ppu_read(struct ppu_context *p, uint16_t addr)
 		p->latch_addr = 2;
 		break;
 	case REG_PPUDATA:
-		vaddr = p->vramaddr & (PPU_VRAM_SIZE - 1);
+		vaddr = p->vramaddr & (PPU_MEMMAP_SIZE - 1);
 
 		if (vaddr <= 0x3eff) {
 			/* Emulate PPUDATA read buffer (post-fetch) */
 			val = p->ppudata;
-			p->ppudata = p->vram[ppu_vaddr_mirror(p, vaddr)];
+			p->ppudata = p->read8(vaddr);
 		} else
-			val = p->vram[ppu_vaddr_mirror(p, vaddr)];
+			val = p->read8(vaddr);
 
 		incr = (p->regs[REG_PPUCTRL] & PPUCTRL_I) ? 32 : 1;
-		p->vramaddr = (p->vramaddr + incr) & (PPU_VRAM_SIZE - 1);
+		p->vramaddr = (p->vramaddr + incr) & (PPU_MEMMAP_SIZE - 1);
 		break;
 	case REG_PPUSCROLL:
 		break;
@@ -182,7 +147,7 @@ ppu_write(struct ppu_context *p, uint16_t addr, uint8_t val)
 			--p->latch_addr;
 		}
 		if (p->latch_addr == 0) {
-			p->vramaddr &= (PPU_VRAM_SIZE - 1);
+			p->vramaddr &= (PPU_MEMMAP_SIZE - 1);
 			//printf("new PPUADDR $%04X\n", p->vramaddr);
 #if 0
 			if (p->vramaddr < 0x2000 || p->vramaddr > 0x3fff)
@@ -191,17 +156,17 @@ ppu_write(struct ppu_context *p, uint16_t addr, uint8_t val)
 		}
 		break;
 	case REG_PPUDATA:
-		p->vramaddr &= (PPU_VRAM_SIZE - 1);
+		p->vramaddr &= (PPU_MEMMAP_SIZE - 1);
 		//printf("PPUDATA addr $%04X\n", p->vramaddr);
-		vaddr = p->vramaddr & (PPU_VRAM_SIZE - 1);
+		vaddr = p->vramaddr & (PPU_MEMMAP_SIZE - 1);
 
-		p->vram[ppu_vaddr_mirror(p, vaddr)] = val;
+		p->write8(vaddr, val);
 #if 0
 		if (vaddr >= 0x3f00)
 			printf("PPU Palette write $%04X : $%02X\n", vaddr, val);
 #endif
 		incr = (p->regs[REG_PPUCTRL] & PPUCTRL_I) ? 32 : 1;
-		p->vramaddr = (p->vramaddr + incr) & (PPU_VRAM_SIZE - 1);
+		p->vramaddr = (p->vramaddr + incr) & (PPU_MEMMAP_SIZE - 1);
 		break;
 	case REG_OAMADDR:
 		p->oamaddr = val;
@@ -263,14 +228,14 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 		const uint16_t attr_off = (((y + yscroll) / 32) * 8) + (((x + xscroll) & 0xff) / 32);
 
 		/* Nametable entry */
-		const uint8_t nt = p->vram[ppu_vaddr_mirror(p, nt_start + nt_off)];
+		const uint8_t nt = p->read8(nt_start + nt_off);
 
 		/* Offset of pattern table entry (low) */
 		const uint16_t pat_off = (uint16_t)nt * 16 + ((y + yscroll) & 7);
 
 		/* Pattern table entry */
-		const uint8_t pat_l = p->vram[pat_start + pat_off];
-		const uint8_t pat_h = p->vram[pat_start + pat_off + 8];
+		const uint8_t pat_l = p->read8(pat_start + pat_off);
+		const uint8_t pat_h = p->read8(pat_start + pat_off + 8);
 		/* Bit in pattern table */
 		const int bit = 7 - ((x + xscroll) & 7);
 		/* Palette entry */
@@ -282,27 +247,27 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 		if (pal) {
 			p->pixels[y][x].priority = PPU_PRIO_BG;
 			/* Attribute table entry */
-			const uint8_t attr = p->vram[ppu_vaddr_mirror(p, attr_start + attr_off)];
+			const uint8_t attr = p->read8(attr_start + attr_off);
 			/* Colour set */
 			const uint8_t cs = ppu_get_cs_for_bgpixel(attr, x + xscroll, y + yscroll);
 
-			p->pixels[y][x].c = p->vram[pal_start + (cs * 4) + pal];
+			p->pixels[y][x].c = p->read8(pal_start + (cs * 4) + pal);
 		} else {
 			/* Default background colour */
 			p->pixels[y][x].priority = PPU_PRIO_NONE;
-			p->pixels[y][x].c = p->vram[pal_start];
+			p->pixels[y][x].c = p->read8(pal_start);
 		}
 
 		if (x < 8 && (p->regs[REG_PPUMASK] & PPUMASK_m) == 0) {
 			/* Hide background in leftmost 8 pixels */
 			p->pixels[y][x].priority = PPU_PRIO_NONE;
 			p->pixels[y][x].pal = 0;
-			p->pixels[y][x].c = p->vram[pal_start];
+			p->pixels[y][x].c = p->read8(pal_start);
 		}
 	} else {
 		p->pixels[y][x].priority = PPU_PRIO_NONE;
 		p->pixels[y][x].pal = 0;
-		p->pixels[y][x].c = p->vram[pal_start];
+		p->pixels[y][x].c = p->read8(pal_start);
 	}
 
 	if (show_sprites) {
@@ -333,8 +298,8 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 				const uint16_t pat_off = (uint16_t)sprite_tile * 16 + (flip_v ? (7 - (yrel & 7)) : (yrel & 7));
 
 				/* Pattern table entry */
-				const uint8_t pat_l = p->vram[pat_start + pat_off];
-				const uint8_t pat_h = p->vram[pat_start + pat_off + 8];
+				const uint8_t pat_l = p->read8(pat_start + pat_off);
+				const uint8_t pat_h = p->read8(pat_start + pat_off + 8);
 				/* Bit in pattern table */
 				const int bit = flip_h ? (xrel & 7) : 7 - (xrel & 7);
 				/* Palette entry */
@@ -358,7 +323,7 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 
 				p->pixels[y][x].priority = priority;
 				p->pixels[y][x].pal = pal;
-				p->pixels[y][x].c = p->vram[pal_start + (cs * 4) + pal];
+				p->pixels[y][x].c = p->read8(pal_start + (cs * 4) + pal);
 
 				/* Emulate sprite priority quirk; visible sprites with the lowest OAM index win regardless of front/back priority */
 				break;
