@@ -223,9 +223,17 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 		const unsigned int yscroll = (p->scroll & 0xff);
 
 		/* Offset of nametable entry */
-		const uint16_t nt_off = (((y + yscroll) / 8) * 32) + (((x + xscroll) & 0xff) / 8);
+		uint16_t nt_off = (((y + yscroll) / 8) * 32) + (((x + xscroll) & 0xff) / 8);
+		if (x + xscroll > 0xff)
+			nt_off += 0x400;
+		if (y + yscroll > 0xff)
+			nt_off += 0x800;
 		/* Offset of attribute table entry */
-		const uint16_t attr_off = (((y + yscroll) / 32) * 8) + (((x + xscroll) & 0xff) / 32);
+		uint16_t attr_off = (((y + yscroll) / 32) * 8) + (((x + xscroll) & 0xff) / 32);
+		if (x + xscroll > 0xff)
+			attr_off += 0x400;
+		if (y + yscroll > 0xff)
+			attr_off += 0x800;
 
 		/* Nametable entry */
 		const uint8_t nt = p->read8(nt_start + nt_off);
