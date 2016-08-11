@@ -47,8 +47,6 @@ struct cpu_frame {
 struct cpu_context {
 	struct cpu_frame frame;
 
-	uint8_t stack[0x100];
-
 	uint8_t (*read8)(uint16_t);
 	void (*write8)(uint16_t, uint8_t);
 
