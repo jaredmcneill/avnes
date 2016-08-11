@@ -31,10 +31,12 @@
 #include "mapper.h"
 
 extern struct mapper_impl MAPPER_IMPL(nrom);
+extern struct mapper_impl MAPPER_IMPL(mmc1);
 extern struct mapper_impl MAPPER_IMPL(mmc2);
 
 static struct mapper_impl *mappers[] = {
 	[0] = &MAPPER_IMPL(nrom),
+	[1] = &MAPPER_IMPL(mmc1),
 	[9] = &MAPPER_IMPL(mmc2),
 };
 
