@@ -31,9 +31,11 @@
 #include "mapper.h"
 
 extern struct mapper_impl MAPPER_IMPL(nrom);
+extern struct mapper_impl MAPPER_IMPL(mmc2);
 
 static struct mapper_impl *mappers[] = {
 	[0] = &MAPPER_IMPL(nrom),
+	[9] = &MAPPER_IMPL(mmc2),
 };
 
 int
@@ -43,13 +45,17 @@ mapper_init(struct mapper_context *m, const uint8_t *data, size_t datalen)
 	struct mapper_impl *impl;
 	int error;
 
-	if (mapper_number >= nitems(mappers) || mappers[mapper_number] == NULL)
+	if (mapper_number >= nitems(mappers) || mappers[mapper_number] == NULL) {
+		printf("Mapper #%d not supported\n", mapper_number);
 		return ENOENT;
+	}
 
 	impl = mappers[mapper_number];
 	error = impl->init(m, data, datalen);
-	if (error != 0)
+	if (error != 0) {
+		printf("Mapper #%d (%s) init failed: %d\n", mapper_number, impl->descr, error);
 		return error;
+	}
 
 	printf("Using mapper #%d (%s)\n", mapper_number, impl->descr);
 
