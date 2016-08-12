@@ -207,8 +207,17 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 	const int show_background = (p->regs[REG_PPUMASK] & PPUMASK_b) != 0;
 	const int show_sprites = (p->regs[REG_PPUMASK] & PPUMASK_s) != 0;
 
+	/* X/Y scrolling */
+	const unsigned int xscroll = ((p->scroll >> 8) & 0xff);
+	const unsigned int yscroll = (p->scroll & 0xff);
+
 	/* Base nametable address */
-	const uint16_t nt_start = 0x2000 + (p->regs[REG_PPUCTRL] & PPUCTRL_N) * 0x400;
+	uint16_t nt_start = 0x2000 + (p->regs[REG_PPUCTRL] & PPUCTRL_N) * 0x400;
+	if (x + xscroll > 0xff)
+		nt_start ^= 0x400;
+	if (y + yscroll > 0xff)
+		nt_start ^= 0x800;
+
 	/* Attribute table starts at the end of the nametable */
 	const uint16_t attr_start = nt_start + 0x3c0;
 	/* Palette address */
@@ -217,35 +226,26 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 	if (show_background) {
 		/* Background pattern table address */
 		const uint16_t pat_start = (p->regs[REG_PPUCTRL] & PPUCTRL_B) ? 0x1000 : 0x0000;
-	
-		/* X/Y scrolling */
-		const unsigned int xscroll = ((p->scroll >> 8) & 0xff);
-		const unsigned int yscroll = (p->scroll & 0xff);
 
+		uint8_t xrel = (x + xscroll) & 0xff;
+		uint8_t yrel = (y + yscroll) & 0xff;
+	
 		/* Offset of nametable entry */
-		uint16_t nt_off = (((y + yscroll) / 8) * 32) + (((x + xscroll) & 0xff) / 8);
-		if (x + xscroll > 0xff)
-			nt_off += 0x400;
-		if (y + yscroll > 0xff)
-			nt_off += 0x800;
+		uint16_t nt_off = ((yrel / 8) * 32) + (xrel / 8);
 		/* Offset of attribute table entry */
-		uint16_t attr_off = (((y + yscroll) / 32) * 8) + (((x + xscroll) & 0xff) / 32);
-		if (x + xscroll > 0xff)
-			attr_off += 0x400;
-		if (y + yscroll > 0xff)
-			attr_off += 0x800;
+		uint16_t attr_off = ((yrel / 32) * 8) + (xrel / 32);
 
 		/* Nametable entry */
 		const uint8_t nt = p->read8(nt_start + nt_off);
 
 		/* Offset of pattern table entry (low) */
-		const uint16_t pat_off = (uint16_t)nt * 16 + ((y + yscroll) & 7);
+		const uint16_t pat_off = (uint16_t)nt * 16 + (yrel & 7);
 
 		/* Pattern table entry */
 		const uint8_t pat_l = p->read8(pat_start + pat_off);
 		const uint8_t pat_h = p->read8(pat_start + pat_off + 8);
 		/* Bit in pattern table */
-		const int bit = 7 - ((x + xscroll) & 7);
+		const int bit = 7 - (xrel & 7);
 		/* Palette entry */
 		const uint8_t pal = ((pat_l & (1 << bit)) ? 1 : 0) |
 				    ((pat_h & (1 << bit)) ? 2 : 0);
