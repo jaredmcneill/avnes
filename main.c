@@ -255,7 +255,11 @@ main(int argc, char *argv[])
 	for (;;) {
 		cpu_step(&avnes.c);
 		if (ppu_step(&avnes.p) == 1) {
-			if (sdl_poll(&avnes.io) != 0)
+			int pending;
+
+			while ((pending = sdl_poll(&avnes.io)) == 0)
+				;
+			if (pending == 1)
 				break;
 		}
 	}

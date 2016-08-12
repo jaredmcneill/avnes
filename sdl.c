@@ -53,6 +53,9 @@ static uint8_t ntscpalette_pal[] = {
 };
 static unsigned int ntscpalette_pal_len = 192;
 
+static uint8_t joymap[256];
+
+static SDL_Joystick *joy;
 static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *texture;
@@ -69,12 +72,26 @@ sdl_init(const char *filename)
 	window_width = PPU_WIDTH * 2 * 8 / 7;
 	window_height = PPU_HEIGHT * 2;
 
-	error = SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS);
+	error = SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK);
 	if (error != 0) {
 		fprintf(stderr, "Couldn't init SDL: %s\n", SDL_GetError());
 		return ENXIO;
 	}
 	atexit(SDL_Quit);
+
+	if (SDL_NumJoysticks() > 0) {
+		joy = SDL_JoystickOpen(0);
+		if (joy) {
+			printf("Using Joystick 0 (%s) for controller port 1\n", SDL_JoystickName(joy));
+
+			for (int i = 0; i < sizeof(joymap); i++)
+				joymap[i] = 0x00;
+			joymap[0] = IO_BUTTON_START;
+			joymap[1] = IO_BUTTON_SELECT;
+			joymap[7] = IO_BUTTON_B;
+			joymap[8] = IO_BUTTON_A;
+		}
+	}
 
 	error = asprintf(&window_title, "avnes - %s", filename);
 	if (error == -1) {
@@ -169,8 +186,11 @@ sdl_poll(struct io_context *io)
 {
 	SDL_Event event;
 	uint8_t btn;
+	int pending;
 
-	SDL_PollEvent(&event);
+	pending = SDL_PollEvent(&event);
+	if (!pending)
+		return -1;
 
 	switch (event.type) {
 	case SDL_QUIT:
@@ -191,6 +211,38 @@ sdl_poll(struct io_context *io)
 			io->state[0] &= ~btn;
 
 		return 0;
+
+	case SDL_JOYBUTTONDOWN:
+	case SDL_JOYBUTTONUP:
+		btn = joymap[event.jbutton.button];
+		if (btn) {
+			if (event.jbutton.state == SDL_PRESSED)
+				io->state[0] |= btn;
+			else
+				io->state[0] &= ~btn;
+		}
+
+		return 0;
+
+	case SDL_JOYAXISMOTION:
+		switch (event.jaxis.axis) {
+		case 0:
+			io->state[0] &= ~(IO_BUTTON_LEFT|IO_BUTTON_RIGHT);
+			if (event.jaxis.value == -32768)
+				io->state[0] |= IO_BUTTON_LEFT;
+			else if (event.jaxis.value == 32767)
+				io->state[0] |= IO_BUTTON_RIGHT;
+			break;
+		case 1:
+			io->state[0] &= ~(IO_BUTTON_UP|IO_BUTTON_DOWN);
+			if (event.jaxis.value == -32768)
+				io->state[0] |= IO_BUTTON_DOWN;
+			else if (event.jaxis.value == 32767)
+				io->state[0] |= IO_BUTTON_UP;
+			break;
+		}
+		return 0;
+
 	}
 
 	return 0;
