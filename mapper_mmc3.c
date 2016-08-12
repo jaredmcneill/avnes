@@ -274,7 +274,8 @@ mmc3_ppuread(struct avnes_context *av, uint16_t addr)
 			const unsigned int off = (PPU_WIDTH * PPU_HEIGHT) - av->p.draw_cycles;
 			const unsigned int y = off / PPU_WIDTH;
 			const unsigned int x = off - (y * PPU_WIDTH);
-			const uint8_t xscroll = (av->p.scroll >> 8) & 0xff;
+			const uint8_t xscroll = ((av->p.draw_v & 0x1f) << 3) |
+			    (av->p.draw_w & 0x3);
 			const uint8_t xrel = (x + xscroll) & 0xff;
 
 			if (xrel == 0xff) {

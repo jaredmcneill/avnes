@@ -65,10 +65,8 @@ struct ppu_pixel {
 struct ppu_context {
 	struct cpu_context *c;
 	uint8_t	regs[PPU_NREG];
-	uint16_t vramaddr;
 	uint8_t oam[PPU_OAM_SIZE];
 	uint8_t oamaddr;
-	uint16_t scroll;
 
 	uint8_t ppudata;
 
@@ -79,12 +77,14 @@ struct ppu_context {
 #define	PPU_F_MIRROR_V		0x01
 #define	PPU_F_MIRROR_NONE	0x08
 
-	int latch_scroll;
-	int latch_addr;
-
 	struct timespec next_vblank;
 
 	struct ppu_pixel pixels[PPU_HEIGHT][PPU_WIDTH];
+
+	uint16_t draw_v;
+	uint16_t draw_t;
+	uint8_t draw_x;
+	uint8_t draw_w;
 
 	unsigned int draw_cycles;
 	int clear_s0;
