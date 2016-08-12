@@ -1584,3 +1584,19 @@ cpu_nmi(struct cpu_context *c)
 	/* Load NMI vector into PC */
 	f->PC = CPU_READ16(c, NMI_VECTOR_L);
 }
+
+void
+cpu_irq(struct cpu_context *c)
+{
+	struct cpu_frame *f = &c->frame;
+
+	/* Push PC and P to stack */
+	cpu_stackpush(c, f->PC >> 8);
+	cpu_stackpush(c, f->PC & 0xff);
+	cpu_stackpush(c, f->P);
+
+	//printf("IRQ PC=$%04X SP=%d\n", f->PC, f->SP);
+
+	/* Load IRQ vector into PC */
+	f->PC = CPU_READ16(c, INTR_VECTOR_L);
+}

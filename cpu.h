@@ -56,5 +56,6 @@ struct cpu_context {
 int	cpu_init(struct cpu_context *);
 void	cpu_step(struct cpu_context *);
 void	cpu_nmi(struct cpu_context *);
+void	cpu_irq(struct cpu_context *);
 
 #endif /* !_CPU_H */
