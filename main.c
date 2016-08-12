@@ -166,6 +166,14 @@ nes_ppuread8(uint16_t addr)
 	assert (addr <= 0x3FFF);
 
 	if (addr >= 0x3F00 && addr <= 0x3FFF) {
+		switch (addr) {
+		case 0x3F10:
+		case 0x3F14:
+		case 0x3F18:
+		case 0x3F1C:
+			addr -= 0x10;
+			break;
+		}
 		return avnes.paletteram[addr & (AVNES_PALETTERAM_SIZE - 1)];
 	}
 
