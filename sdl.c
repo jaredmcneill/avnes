@@ -60,6 +60,7 @@ static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *texture;
 static uint8_t fbmem[PPU_WIDTH * PPU_HEIGHT * 4];
+static int fullscreen = 0;
 
 int
 sdl_init(const char *filename)
@@ -111,6 +112,10 @@ sdl_init(const char *filename)
 	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	if (!renderer) {
 		fprintf(stderr, "Couldn't create SDL renderer: %s\n", SDL_GetError());
+		return ENXIO;
+	}
+	if (SDL_RenderSetLogicalSize(renderer, window_width, window_height) != 0) {
+		fprintf(stderr, "Couldn't set SDL renderer logical resolution: %s\n", SDL_GetError());
 		return ENXIO;
 	}
 
@@ -202,6 +207,12 @@ sdl_poll(struct io_context *io)
 
 		if (event.key.keysym.sym == SDLK_ESCAPE)
 			return 1;
+
+		if (event.key.keysym.sym == SDLK_f && event.key.state == SDL_RELEASED) {
+			fullscreen ^= 1;
+			SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+			return 0;
+		}
 
 		btn = sdl_keytobutton(io, &event.key);
 
