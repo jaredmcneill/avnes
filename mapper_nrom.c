@@ -33,8 +33,12 @@
 #include "mapper.h"
 #include "rom.h"
 
+#define	PRG_RAM_SIZE	0x2000
+
 struct nrom_context {
 	uint8_t mirror;
+
+	uint8_t prg_ram[PRG_RAM_SIZE];
 };
 
 static uint8_t
@@ -59,7 +63,11 @@ nrom_ppuread(struct avnes_context *av, uint16_t addr)
 
 	if (addr >= 0x0000 && addr <= 0x1FFF) {
 		/* Pattern table */
-		return av->rom_data[av->chr_start + (addr & (av->chr_len - 1))];
+		if (av->chr_len) {
+			return av->rom_data[av->chr_start + (addr & (av->chr_len - 1))];
+		} else {
+			return mc->prg_ram[addr];
+		}
 	}
 
 	if (addr >= 0x2000 && addr <= 0x3EFF) {
@@ -89,6 +97,11 @@ static void
 nrom_ppuwrite(struct avnes_context *av, uint16_t addr, uint8_t val)
 {
 	struct nrom_context *mc = av->m.priv;
+
+	if (av->chr_len == 0 && addr >= 0x0000 && addr <= 0x1FFF) {
+		mc->prg_ram[addr] = val;
+		return;
+	}
 
 	if (addr >= 0x2000 && addr <= 0x3EFF) {
 		/* Nametable */
