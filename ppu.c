@@ -39,6 +39,7 @@
 
 #define	REG_PPUCTRL	0
 #define	 PPUCTRL_V	(1 << 7)	/* Vertical blank NMI enable */
+#define	 PPUCTRL_H	(1 << 5)	/* Sprite size (0: 8x8; 1: 8x16) */
 #define	 PPUCTRL_B	(1 << 4)	/* Background palette table address */
 #define	 PPUCTRL_S	(1 << 3)	/* Sprite pattern table address for 8x8 sprites */
 #define	 PPUCTRL_I	(1 << 2)	/* VRAM address increment per CPU read/write of PPUDATA */
@@ -280,7 +281,7 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 
 	if (show_sprites) {
 		/* Sprite pattern table address */
-		const uint16_t pat_start = (p->regs[REG_PPUCTRL] & PPUCTRL_S) ? 0x1000 : 0x0000;
+		const uint16_t sprite_height = (p->regs[REG_PPUCTRL] & PPUCTRL_H) ? 16 : 8;
 
 		for (int n = 0; n < 64; n++) {
 			const uint8_t sprite_y = p->oam[n * 4 + 0] + 1;
@@ -289,7 +290,7 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 			if (sprite_y == 0 || sprite_y >= 0xf0)
 				continue;
 
-			if (x >= sprite_x && x < sprite_x + 8 && y >= sprite_y && y < sprite_y + 8) {
+			if (x >= sprite_x && x < sprite_x + 8 && y >= sprite_y && y < sprite_y + sprite_height) {
 				const unsigned int xrel = x - sprite_x;
 				const unsigned int yrel = y - sprite_y;
 				const uint8_t sprite_tile = p->oam[n * 4 + 1];
@@ -302,8 +303,17 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 				/* Priority */
 				const int priority = (sprite_attr & 0x20) != 0 ? PPU_PRIO_BEHIND : PPU_PRIO_FRONT;
 
+				const uint16_t pat_start = sprite_height == 8 ?
+				    ((p->regs[REG_PPUCTRL] & PPUCTRL_S) ? 0x1000 : 0x0000) :
+				    (sprite_tile & 1) << 12;
+
+				/* Sprite tile start */
+				const uint16_t sprite_tile_start = sprite_height == 8 ?
+				    sprite_tile : (sprite_tile & 0xfe);
+
 				/* Offset of pattern table entry (low) */
-				const uint16_t pat_off = (uint16_t)sprite_tile * 16 + (flip_v ? (7 - (yrel & 7)) : (yrel & 7));
+				const uint16_t pat_off = sprite_tile_start * 16 +
+				    (flip_v ? ((sprite_height - 1) - (yrel & (sprite_height - 1))) : (yrel & (sprite_height - 1)));
 
 				/* Pattern table entry */
 				const uint8_t pat_l = p->read8(pat_start + pat_off);
