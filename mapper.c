@@ -30,15 +30,17 @@
 #include "avnes.h"
 #include "mapper.h"
 
-extern struct mapper_impl MAPPER_IMPL(nrom);
+extern struct mapper_impl MAPPER_IMPL(cnrom);
 extern struct mapper_impl MAPPER_IMPL(mmc1);
 extern struct mapper_impl MAPPER_IMPL(mmc2);
+extern struct mapper_impl MAPPER_IMPL(nrom);
 extern struct mapper_impl MAPPER_IMPL(unrom);
 
 static struct mapper_impl *mappers[] = {
 	[0] = &MAPPER_IMPL(nrom),
 	[1] = &MAPPER_IMPL(mmc1),
 	[2] = &MAPPER_IMPL(unrom),
+	[3] = &MAPPER_IMPL(cnrom),
 	[9] = &MAPPER_IMPL(mmc2),
 };
 
