@@ -280,7 +280,7 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 	}
 
 	if (show_sprites) {
-		/* Sprite pattern table address */
+		/* Sprite height (8 or 16 pixels) */
 		const uint16_t sprite_height = (p->regs[REG_PPUCTRL] & PPUCTRL_H) ? 16 : 8;
 
 		for (int n = 0; n < 64; n++) {
@@ -303,6 +303,7 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 				/* Priority */
 				const int priority = (sprite_attr & 0x20) != 0 ? PPU_PRIO_BEHIND : PPU_PRIO_FRONT;
 
+				/* Sprite pattern table address */
 				const uint16_t pat_start = sprite_height == 8 ?
 				    ((p->regs[REG_PPUCTRL] & PPUCTRL_S) ? 0x1000 : 0x0000) :
 				    (sprite_tile & 1) << 12;
