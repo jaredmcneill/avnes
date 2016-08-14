@@ -377,16 +377,18 @@ ppu_step(struct ppu_context *p)
 			p->frame_ticks -= 1;
 		}
 
+		p->frame++;
+
 		ret = 1;
 	} else {
 		const unsigned int tick = PPU_TICKS_PER_FRAME - p->frame_ticks;
 		const int scanline = (tick / 341) - 1;
+		const unsigned int scanline_cycle = tick % 341;
 
 		if (scanline == -1) {
 			/* Pre-render scanline */
 		} else if (scanline >= 0 && scanline <= 239) {
 			/* Visible scanlines */
-			unsigned int scanline_cycle = tick % 341;
 			if (scanline_cycle == 0) {
 				/* Idle cycle */
 			} else if (scanline_cycle >= 1 && scanline_cycle <= 256) {
@@ -403,7 +405,7 @@ ppu_step(struct ppu_context *p)
 			/* Post-render scanline */
 		} else if (scanline >= 241 && scanline <= 260) {
 			/* Vertical blanking lines */
-			if (scanline == 241 && (tick % 341) == 1) {
+			if (scanline == 241 && scanline_cycle == 1) {
 				/* Set VBlank flag on second tick of scanline 241 */
 				p->regs[REG_PPUSTATUS] |= PPUSTATUS_V;
 
@@ -421,8 +423,6 @@ ppu_step(struct ppu_context *p)
 
 		--p->frame_ticks;
 	}
-
-	p->frame++;
 
 	return ret;
 }

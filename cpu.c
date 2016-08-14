@@ -1681,10 +1681,8 @@ cpu_step(struct cpu_context *c)
 			abort();
 		}
 
-		c->delay = o->cycles - 1;
+		c->delay += o->cycles;
 		c->fetch = 0;
-
-		return;
 	}
 
 	if (--c->delay == 0) {
@@ -1693,8 +1691,7 @@ cpu_step(struct cpu_context *c)
 		o = &cpu_opcodes[opcode];
 		//cpu_dumpop(c, o);
 		c->delay = o->op(c, o) - o->cycles;
-		if (c->delay == 0)
-			c->fetch = 1;
+		c->fetch = 1;
 	}
 }
 
