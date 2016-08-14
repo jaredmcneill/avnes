@@ -138,9 +138,9 @@ mmc2_ppuread(struct avnes_context *av, uint16_t addr)
 	if (addr >= 0x1000 && addr <= 0x1FFF) {
 		/* 4KB switchable CHR ROM bank 1 */
 		val = av->rom_data[av->chr_start + (addr - 0x1000) + *mc->cbptr[1]];
-		if (addr == 0x1FD8)
+		if (addr >= 0x1FD8 && addr <= 0x1FDF)
 			mc->cbptr[1] = &mc->cbsel[1][0];
-		else if (addr == 0x1FE8)
+		else if (addr >= 0x1FE8 && addr <= 0x1FEF)
 			mc->cbptr[1] = &mc->cbsel[1][1];
 		return val;
 	}
