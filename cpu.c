@@ -1192,7 +1192,7 @@ cpuop_push(struct cpu_context *c, struct cpu_opcode *o)
 
 	switch (o->opcode) {
 	case 0x08:	/* Push Processor Status */
-		cpu_stackpush(c, f->P);
+		cpu_stackpush(c, f->P | P_U);
 		break;
 	case 0x48:	/* Push Accumulator */
 		cpu_stackpush(c, f->A);
@@ -1213,7 +1213,7 @@ cpuop_pull(struct cpu_context *c, struct cpu_opcode *o)
 
 	switch (o->opcode) {
 	case 0x28:	/* Pull Processor Status */
-		f->P = cpu_stackpull(c);
+		f->P = cpu_stackpull(c) | P_U;
 		break;
 	case 0x68:	/* Pull Accumulator */
 		f->A = cpu_stackpull(c);
