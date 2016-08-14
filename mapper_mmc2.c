@@ -39,7 +39,7 @@ struct mmc2_context {
 	uint8_t mirror;
 	uint8_t prg_ram[PRG_RAM_SIZE];
 	uint32_t pb;		/* PRG bank */
-	uint32_t cb[2];		/* CHR bank */
+	uint32_t *cbptr[2];	/* CHR bank */
 	uint32_t cbsel[2][2];	/* CHR bank select */
 };
 
@@ -128,20 +128,20 @@ mmc2_ppuread(struct avnes_context *av, uint16_t addr)
 
 	if (addr >= 0x0000 && addr <= 0x0FFF) {
 		/* 4KB switchable CHR ROM bank 0 */
-		val = av->rom_data[av->chr_start + (addr - 0x0000) + mc->cb[0]];
+		val = av->rom_data[av->chr_start + (addr - 0x0000) + *mc->cbptr[0]];
 		if (addr == 0x0FD8)
-			mc->cb[0] = mc->cbsel[0][0];
+			mc->cbptr[0] = &mc->cbsel[0][0];
 		else if (addr == 0x0FE8)
-			mc->cb[0] = mc->cbsel[0][1];
+			mc->cbptr[0] = &mc->cbsel[0][1];
 		return val;
 	}
 	if (addr >= 0x1000 && addr <= 0x1FFF) {
 		/* 4KB switchable CHR ROM bank 1 */
-		val = av->rom_data[av->chr_start + (addr - 0x1000) + mc->cb[1]];
+		val = av->rom_data[av->chr_start + (addr - 0x1000) + *mc->cbptr[1]];
 		if (addr == 0x1FD8)
-			mc->cb[1] = mc->cbsel[1][0];
+			mc->cbptr[1] = &mc->cbsel[1][0];
 		else if (addr == 0x1FE8)
-			mc->cb[1] = mc->cbsel[1][1];
+			mc->cbptr[1] = &mc->cbsel[1][1];
 		return val;
 	}
 
@@ -212,6 +212,8 @@ mmc2_init(struct mapper_context *m, const uint8_t *data, size_t datalen)
 
 	mc->mirror = data[6] & ROM_MIRROR_MASK;
 	mc->pb = 0x2000;
+	mc->cbptr[0] = &mc->cbsel[0][1];
+	mc->cbptr[1] = &mc->cbsel[1][1];
 
 	m->cpuread = mmc2_cpuread;
 	m->cpuwrite = mmc2_cpuwrite;
