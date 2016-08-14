@@ -212,8 +212,8 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 	const int show_sprites = (p->regs[REG_PPUMASK] & PPUMASK_s) != 0;
 
 	/* X/Y scrolling */
-	const unsigned int xscroll = ((p->scroll >> 8) & 0xff);
-	const unsigned int yscroll = (p->scroll & 0xff);
+	const unsigned int xscroll = p->xscroll;
+	const unsigned int yscroll = p->yscroll;
 
 	/* Base nametable address */
 	uint16_t nt_start = 0x2000 + (p->regs[REG_PPUCTRL] & PPUCTRL_N) * 0x400;
@@ -332,8 +332,11 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 				 * When a nonzero pixel of sprite 0 overlaps a nonzero background pixel,
 				 * set the Sprite 0 Hit flag in PPUSTATUS
 				 */
-				if (n == 0 && x < 255 && p->pixels[y][x].pal != 0 && pal != 0) {
-					p->regs[REG_PPUSTATUS] |= PPUSTATUS_S;
+				if (n == 0 && p->pixels[y][x].pal != 0 && pal != 0) {
+					if (p->sprite0_hit == 0) {
+						p->regs[REG_PPUSTATUS] |= PPUSTATUS_S;
+						p->sprite0_hit = 1;
+					}
 				}
 
 				/* Skip pixels in front of this one. If sprites overlap, the lower numbered sprite wins. */
@@ -387,9 +390,13 @@ ppu_step(struct ppu_context *p)
 
 		if (scanline == -1) {
 			/* Pre-render scanline */
-			if ((tick % 341) == 1) {
+			if (scanline_cycle == 1) {
 				/* Clear VBlank, Sprite 0 Hit */
 				p->regs[REG_PPUSTATUS] &= ~(PPUSTATUS_S | PPUSTATUS_V);
+				p->sprite0_hit = 0;
+			} else if (scanline_cycle == 280) {
+				/* Reload vertical scroll position */
+				p->yscroll = p->scroll & 0xff;
 			}
 		} else if (scanline >= 0 && scanline <= 239) {
 			/* Visible scanlines */
@@ -399,6 +406,10 @@ ppu_step(struct ppu_context *p)
 				/* Fetch cycle */
 				ppu_put_pixel(p, scanline_cycle - 1, scanline);
 			} else if (scanline_cycle >= 257 && scanline_cycle <= 320) {
+				if (scanline_cycle == 257) {
+					/* Reload horizontal scroll position */
+					p->xscroll = (p->scroll >> 8) & 0xff;
+				}
 				/* Tile data for sprites on the next scanline are fetched (XXX) */
 			} else if (scanline_cycle >= 321 && scanline_cycle <= 336) {
 				/* First two tiles for the next scanline are fetched (XXX) */

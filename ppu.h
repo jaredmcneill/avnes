@@ -102,7 +102,10 @@ struct ppu_context {
 	unsigned int frame_ticks;
 	uint64_t ticks;
 
-	int clear_s0;
+	int sprite0_hit;
+	int xscroll;
+	int yscroll;
+
 	void (*draw)(struct ppu_context *);
 	uint8_t (*read8)(uint16_t);
 	void (*write8)(uint16_t, uint8_t);
