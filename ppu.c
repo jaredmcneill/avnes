@@ -193,11 +193,11 @@ ppu_write(struct ppu_context *p, uint16_t addr, uint8_t val)
 static uint8_t
 ppu_get_cs_for_bgpixel(uint8_t attr, unsigned int x, unsigned int y)
 {
-	if ((x & 0xf) < 8 && (y & 0xf) < 8)
+	if ((x & 0x1f) < 16 && (y & 0x1f) < 16)
 		return (attr >> 0) & 0x3;	/* top left */
-	else if ((x & 0xf) < 8 && (y & 0xf) >= 8)
+	else if ((x & 0x1f) < 16 && (y & 0x1f) >= 16)
 		return (attr >> 4) & 0x3;	/* bottom left */
-	else if ((x & 0xf) >= 8 && (y & 0xf) < 8)
+	else if ((x & 0x1f) >= 16 && (y & 0x1f) < 16)
 		return (attr >> 2) & 0x3;	/* top right */
 	else
 		return (attr >> 6) & 0x3;	/* bottom right */
