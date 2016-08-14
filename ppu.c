@@ -213,13 +213,13 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 
 	/* X/Y scrolling */
 	const unsigned int xscroll = p->xscroll;
-	const unsigned int yscroll = p->yscroll;
+	unsigned int yscroll = p->yscroll;
 
 	/* Base nametable address */
 	uint16_t nt_start = 0x2000 + (p->regs[REG_PPUCTRL] & PPUCTRL_N) * 0x400;
 	if (x + xscroll > 0xff)
 		nt_start ^= 0x400;
-	if (y + yscroll > 0xff)
+	if (y + yscroll >= 0xf0)
 		nt_start ^= 0x800;
 
 	/* Attribute table starts at the end of the nametable */
@@ -233,6 +233,8 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 
 		uint8_t xrel = (x + xscroll) & 0xff;
 		uint8_t yrel = (y + yscroll) & 0xff;
+		if (y + yscroll >= 0xf0)
+			yrel -= 0xf0;
 	
 		/* Offset of nametable entry */
 		uint16_t nt_off = ((yrel / 8) * 32) + (xrel / 8);
