@@ -51,6 +51,7 @@ struct cpu_context {
 	void (*write8)(uint16_t, uint8_t);
 
 	uint64_t insns;
+	uint64_t ticks;
 };
 
 int	cpu_init(struct cpu_context *);
