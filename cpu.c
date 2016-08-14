@@ -1648,6 +1648,9 @@ cpu_init(struct cpu_context *c)
 	struct cpu_frame *f = &c->frame;
 
 	c->insns = 0;
+	c->ticks = 0;
+	c->delay = 0;
+	c->fetch = 1;
 
 	memset(f, 0, sizeof(*f));
 
@@ -1666,21 +1669,33 @@ cpu_step(struct cpu_context *c)
 	uint8_t opcode;
 	int cycles;
 
-	opcode = CPU_READ8(c, f->PC);
+	++c->ticks;
 
-	o = &cpu_opcodes[opcode];
-	if (o->op == NULL) {
-		printf("PANIC: unknown opcode $%02X\n", opcode);
-		cpu_dumpop(c, NULL);
-		abort();
+	if (c->fetch) {
+		opcode = CPU_READ8(c, f->PC);
+
+		o = &cpu_opcodes[opcode];
+		if (o->op == NULL) {
+			printf("PANIC: unknown opcode $%02X\n", opcode);
+			cpu_dumpop(c, NULL);
+			abort();
+		}
+
+		c->delay = o->cycles - 1;
+		c->fetch = 0;
+
+		return;
 	}
 
-	//cpu_dumpop(c, o);
-
-	cycles = o->op(c, o);
-
-	c->ticks += cycles;
-	++c->insns;
+	if (--c->delay == 0) {
+		++c->insns;
+		opcode = CPU_READ8(c, f->PC);
+		o = &cpu_opcodes[opcode];
+		//cpu_dumpop(c, o);
+		c->delay = o->op(c, o) - o->cycles;
+		if (c->delay == 0)
+			c->fetch = 1;
+	}
 }
 
 void
@@ -1697,6 +1712,9 @@ cpu_nmi(struct cpu_context *c)
 
 	/* Load NMI vector into PC */
 	f->PC = CPU_READ16(c, NMI_VECTOR_L);
+
+	c->delay = 0;
+	c->fetch = 1;
 }
 
 void
@@ -1713,4 +1731,7 @@ cpu_irq(struct cpu_context *c)
 
 	/* Load IRQ vector into PC */
 	f->PC = CPU_READ16(c, INTR_VECTOR_L);
+
+	c->delay = 0;
+	c->fetch = 1;
 }

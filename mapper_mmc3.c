@@ -271,19 +271,21 @@ mmc3_ppuread(struct avnes_context *av, uint16_t addr)
 			addr -= 0x1000;
 
 		if (mc->irq_enable) {
-			const unsigned int off = (PPU_WIDTH * PPU_HEIGHT) - av->p.draw_cycles;
-			const unsigned int y = off / PPU_WIDTH;
-			const unsigned int x = off - (y * PPU_WIDTH);
+			const unsigned int tick = PPU_TICKS_PER_FRAME - av->p.frame_ticks;
+			const int scanline = (tick / 262) - 1;
 
-			if (x == 0xff) {
-				if (mc->irq_counter == 0)
-					mc->irq_counter = mc->irq_latch;
-				else
-					mc->irq_counter--;
+			if (scanline >= 0 && scanline <= 239) {
+				const unsigned int scanline_cycle = tick % 341;
+				if (scanline_cycle == 256) {
+					if (mc->irq_counter == 0)
+						mc->irq_counter = mc->irq_latch;
+					else
+						mc->irq_counter--;
 
-				if (mc->irq_counter == 0 && !mc->irq_pending) {
-					mc->irq_pending = 1;
-					cpu_irq(&av->c);
+					if (mc->irq_counter == 0 && !mc->irq_pending) {
+						mc->irq_pending = 1;
+						cpu_irq(&av->c);
+					}
 				}
 			}
 		}

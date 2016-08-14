@@ -261,10 +261,16 @@ main(int argc, char *argv[])
 	memset(&avnes.io, 0, sizeof(avnes.io));
 
 	for (;;) {
-		cpu_step(&avnes.c);
-		if (ppu_step(&avnes.p) == 1) {
-			int pending;
+		int frame_complete = 0;
 
+		cpu_step(&avnes.c);
+
+		for (int i = 0; i < 3; i++) {
+			frame_complete += ppu_step(&avnes.p);
+		}
+
+		if (frame_complete) {
+			int pending;
 			while ((pending = sdl_poll(&avnes.io)) == 0)
 				;
 			if (pending == 1)

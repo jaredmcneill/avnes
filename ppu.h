@@ -45,12 +45,24 @@
                 }                                                       \
         } while (0)
 
+#define timespecsub(vvp, uvp)                                           \
+        do {                                                            \
+                (vvp)->tv_sec -= (uvp)->tv_sec;                         \
+                (vvp)->tv_nsec -= (uvp)->tv_nsec;                       \
+                if ((vvp)->tv_nsec < 0) {                               \
+                        (vvp)->tv_sec--;                                \
+                        (vvp)->tv_nsec += 1000000000;                   \
+                }                                                       \
+        } while (0)
+
 #define	PPU_NREG	8
 #define	PPU_OAM_SIZE	0x100
 #define	PPU_MEMMAP_SIZE	0x4000
 
 #define	PPU_WIDTH	256
 #define	PPU_HEIGHT	240
+
+#define	PPU_TICKS_PER_FRAME	89342
 
 struct ppu_pixel {
 	uint8_t priority;
@@ -86,7 +98,10 @@ struct ppu_context {
 
 	struct ppu_pixel pixels[PPU_HEIGHT][PPU_WIDTH];
 
-	unsigned int draw_cycles;
+	unsigned int frame;
+	unsigned int frame_ticks;
+	uint64_t ticks;
+
 	int clear_s0;
 	void (*draw)(struct ppu_context *);
 	uint8_t (*read8)(uint16_t);

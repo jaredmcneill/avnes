@@ -70,6 +70,9 @@ ppu_init(struct ppu_context *p)
 	p->latch_addr = 2;
 	p->latch_scroll = 2;
 
+	p->frame = 0;
+	p->frame_ticks = PPU_TICKS_PER_FRAME;
+
 	clock_gettime(CLOCK_MONOTONIC, &p->next_vblank);
 	timespecadd(&p->next_vblank, &PPU_VBLANK_INTERVAL);
 
@@ -354,67 +357,72 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 int
 ppu_step(struct ppu_context *p)
 {
-	struct timespec ts, when;
+	struct timespec ts;
+	int ret = 0;
 
-	if (p->draw_cycles > 0) {
-		for (int i = 0; i < 3; i++) {
-			unsigned int off = (PPU_WIDTH * PPU_HEIGHT) - p->draw_cycles;
-			unsigned int y = off / PPU_WIDTH;
-			unsigned int x = off - (y * PPU_WIDTH);
-			ppu_put_pixel(p, x, y);
+	if (p->frame_ticks == 0) {
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		if (timespeccmp(&ts, &p->next_vblank, <)) {
+			timespecsub(&ts, &p->next_vblank);
+			nanosleep(&ts, NULL);
+			timespecadd(&p->next_vblank, &PPU_VBLANK_INTERVAL);
+		}
 
-			if (--p->draw_cycles == 0) {
-				if (p->draw)
-					p->draw(p);
+		if (p->draw)
+			p->draw(p);
 
-				if (!p->clear_s0 && (p->regs[REG_PPUSTATUS] & PPUSTATUS_S) != 0)
-					p->clear_s0 = 1;
-				else if (p->clear_s0) {
-					/* Clear Sprite 0 Hit */
-					p->regs[REG_PPUSTATUS] &= ~PPUSTATUS_S;
-				}
+		p->frame_ticks = PPU_TICKS_PER_FRAME;
+		if ((p->frame & 1) != 0 || (p->regs[REG_PPUMASK] & PPUMASK_b) != 0) {
+			/* Pre-render scanline -1, cycle 0 is skipped for odd PPU frames and when the BG is disabled */
+			p->frame_ticks -= 1;
+		}
 
-				/* Set vblank flag */
+		ret = 1;
+	} else {
+		const unsigned int tick = PPU_TICKS_PER_FRAME - p->frame_ticks;
+		const int scanline = (tick / 341) - 1;
+
+		if (scanline == -1) {
+			/* Pre-render scanline */
+		} else if (scanline >= 0 && scanline <= 239) {
+			/* Visible scanlines */
+			unsigned int scanline_cycle = tick % 341;
+			if (scanline_cycle == 0) {
+				/* Idle cycle */
+			} else if (scanline_cycle >= 1 && scanline_cycle <= 256) {
+				/* Fetch cycle */
+				ppu_put_pixel(p, scanline_cycle - 1, scanline);
+			} else if (scanline_cycle >= 257 && scanline_cycle <= 320) {
+				/* Tile data for sprites on the next scanline are fetched (XXX) */
+			} else if (scanline_cycle >= 321 && scanline_cycle <= 336) {
+				/* First two tiles for the next scanline are fetched (XXX) */
+			} else if (scanline_cycle >= 337 && scanline_cycle <= 340) {
+				/* Two nametable bytes are fetched for unknown purposes (XXX) */
+			}
+		} else if (scanline == 240) {
+			/* Post-render scanline */
+		} else if (scanline >= 241 && scanline <= 260) {
+			/* Vertical blanking lines */
+			if (scanline == 241 && (tick % 341) == 1) {
+				/* Set VBlank flag on second tick of scanline 241 */
 				p->regs[REG_PPUSTATUS] |= PPUSTATUS_V;
 
-				return 1;
+				/* VBlank NMI */
+				if (p->regs[REG_PPUCTRL] & PPUCTRL_V)
+					cpu_nmi(p->c);
+			}
+		} else if (scanline == 261) {
+			/* Pre-render scanline */
+			if ((tick % 341) == 1) {
+				/* Clear VBlank, Sprite 0 Hit */
+				p->regs[REG_PPUSTATUS] &= ~(PPUSTATUS_S | PPUSTATUS_V);
 			}
 		}
-		return 0;
+
+		--p->frame_ticks;
 	}
 
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	if (timespeccmp(&ts, &p->next_vblank, >=) && p->draw_cycles == 0) {
-		p->draw_cycles = PPU_WIDTH * PPU_HEIGHT;
+	p->frame++;
 
-#if 0
-		printf("Sprites:");
-		for (int n = 0; n < 64; n++) {
-			const uint8_t sprite_y = p->oam[n * 4 + 0] + 1;
-			const uint8_t sprite_x = p->oam[n * 4 + 3];
-
-			if (sprite_y == 0 || sprite_y >= 0xf0)
-				break;
-			printf(" %02X@%dx%d", n, sprite_x, sprite_y);
-		}
-		printf("\n");
-#endif
-
-		if (p->regs[REG_PPUCTRL] & PPUCTRL_V)
-			cpu_nmi(p->c);
-
-#if 0
-		/* X/Y scrolling */
-		const unsigned int xscroll = ((p->scroll >> 8) & 0xff) +
-		    ((p->regs[REG_PPUCTRL] & PPUCTRL_N_X) ? PPU_WIDTH : 0);
-		const unsigned int yscroll = (p->scroll & 0xff) +
-		    ((p->regs[REG_PPUCTRL] & PPUCTRL_N_Y) ? PPU_HEIGHT : 0);
-		printf("Scroll X=%d Y=%d\n", xscroll, yscroll);
-#endif
-
-		clock_gettime(CLOCK_MONOTONIC, &p->next_vblank);
-		timespecadd(&p->next_vblank, &PPU_VBLANK_INTERVAL);
-	}
-
-	return 0;
+	return ret;
 }

@@ -52,6 +52,8 @@ struct cpu_context {
 
 	uint64_t insns;
 	uint64_t ticks;
+
+	int delay, fetch;
 };
 
 int	cpu_init(struct cpu_context *);
