@@ -221,6 +221,14 @@ mmc3_ppuaddr2romoffset(struct avnes_context *av, uint16_t addr)
 		}
 	} else {
 		/* Two 2KB banks at $1000-$1FFF, four 1KB banks at $0000-$1FFF */
+		if (addr >= 0x1000 && addr <= 0x17FF) {
+			/* 2KB switchable CHR ROM bank */
+			return (addr - 0x1000) + (mc->bank[0] * 0x800);
+		}
+		if (addr >= 0x1800 && addr <= 0x1FFF) {
+			/* 2KB switchable CHR ROM bank */
+			return (addr - 0x1800) + (mc->bank[1] * 0x800);
+		}
 		if (addr >= 0x0000 && addr <= 0x03FF) {
 			/* 1KB switchable CHR ROM bank */
 			return (addr - 0x0000) + (mc->bank[2] * 0x400);
@@ -235,15 +243,7 @@ mmc3_ppuaddr2romoffset(struct avnes_context *av, uint16_t addr)
 		}
 		if (addr >= 0x0C00 && addr <= 0x0FFF) {
 			/* 1KB switchable CHR ROM bank */
-			return (addr - 0x1C00) + (mc->bank[5] * 0x400);
-		}
-		if (addr >= 0x1000 && addr <= 0x17FF) {
-			/* 2KB switchable CHR ROM bank */
-			return (addr - 0x1000) + (mc->bank[0] * 0x800);
-		}
-		if (addr >= 0x1800 && addr <= 0x1FFF) {
-			/* 2KB switchable CHR ROM bank */
-			return (addr - 0x1800) + (mc->bank[1] * 0x800);
+			return (addr - 0x0C00) + (mc->bank[5] * 0x400);
 		}
 	}
 
@@ -270,22 +270,21 @@ mmc3_ppuread(struct avnes_context *av, uint16_t addr)
 		if (addr >= 0x3000)
 			addr -= 0x1000;
 
-		if (mc->irq_enable) {
-			const unsigned int tick = PPU_TICKS_PER_FRAME - av->p.frame_ticks;
-			const int scanline = (tick / 341) - 1;
+		const unsigned int tick = PPU_TICKS_PER_FRAME - av->p.frame_ticks;
+		const int scanline = (tick / 341) - 1;
 
-			if (scanline >= 0 && scanline <= 239) {
-				const unsigned int scanline_cycle = tick % 341;
-				if (scanline_cycle == 256) {
-					if (mc->irq_counter == 0)
-						mc->irq_counter = mc->irq_latch;
-					else
-						mc->irq_counter--;
+		if (scanline >= 0 && scanline <= 239) {
+			const unsigned int scanline_cycle = (tick % 341) - 1;
+			if (scanline_cycle == 256) {
+				if (mc->irq_counter == 0)
+					mc->irq_counter = mc->irq_latch;
+				else
+					mc->irq_counter--;
 
-					if (mc->irq_counter == 0 && !mc->irq_pending) {
-						mc->irq_pending = 1;
+				if (mc->irq_counter == 0 && !mc->irq_pending) {
+					mc->irq_pending = 1;
+					if (mc->irq_enable)
 						cpu_irq(&av->c);
-					}
 				}
 			}
 		}
