@@ -387,6 +387,10 @@ ppu_step(struct ppu_context *p)
 
 		if (scanline == -1) {
 			/* Pre-render scanline */
+			if ((tick % 341) == 1) {
+				/* Clear VBlank, Sprite 0 Hit */
+				p->regs[REG_PPUSTATUS] &= ~(PPUSTATUS_S | PPUSTATUS_V);
+			}
 		} else if (scanline >= 0 && scanline <= 239) {
 			/* Visible scanlines */
 			if (scanline_cycle == 0) {
@@ -412,12 +416,6 @@ ppu_step(struct ppu_context *p)
 				/* VBlank NMI */
 				if (p->regs[REG_PPUCTRL] & PPUCTRL_V)
 					cpu_nmi(p->c);
-			}
-		} else if (scanline == 261) {
-			/* Pre-render scanline */
-			if ((tick % 341) == 1) {
-				/* Clear VBlank, Sprite 0 Hit */
-				p->regs[REG_PPUSTATUS] &= ~(PPUSTATUS_S | PPUSTATUS_V);
 			}
 		}
 
