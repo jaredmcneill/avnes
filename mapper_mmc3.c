@@ -272,7 +272,7 @@ mmc3_ppuread(struct avnes_context *av, uint16_t addr)
 
 		if (mc->irq_enable) {
 			const unsigned int tick = PPU_TICKS_PER_FRAME - av->p.frame_ticks;
-			const int scanline = (tick / 262) - 1;
+			const int scanline = (tick / 341) - 1;
 
 			if (scanline >= 0 && scanline <= 239) {
 				const unsigned int scanline_cycle = tick % 341;
