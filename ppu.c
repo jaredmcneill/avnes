@@ -256,33 +256,40 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 		const uint8_t pal = ((pat_l & (1 << bit)) ? 1 : 0) |
 				    ((pat_h & (1 << bit)) ? 2 : 0);
 
-		p->pixels[y][x].pal = pal;
+		if (x <= 0xff) {
+			p->pixels[y][x].pal = pal;
 
-		if (pal) {
-			p->pixels[y][x].priority = PPU_PRIO_BG;
-			/* Attribute table entry */
-			const uint8_t attr = p->read8(attr_start + attr_off);
-			/* Colour set */
-			const uint8_t cs = ppu_get_cs_for_bgpixel(attr, x + xscroll, y + yscroll);
+			if (pal) {
+				p->pixels[y][x].priority = PPU_PRIO_BG;
+				/* Attribute table entry */
+				const uint8_t attr = p->read8(attr_start + attr_off);
+				/* Colour set */
+				const uint8_t cs = ppu_get_cs_for_bgpixel(attr, x + xscroll, y + yscroll);
 
-			p->pixels[y][x].c = p->read8(pal_start + (cs * 4) + pal);
-		} else {
-			/* Default background colour */
-			p->pixels[y][x].priority = PPU_PRIO_NONE;
-			p->pixels[y][x].c = p->read8(pal_start);
+				p->pixels[y][x].c = p->read8(pal_start + (cs * 4) + pal);
+			} else {
+				/* Default background colour */
+				p->pixels[y][x].priority = PPU_PRIO_NONE;
+				p->pixels[y][x].c = p->read8(pal_start);
+			}
+
+			if (x < 8 && (p->regs[REG_PPUMASK] & PPUMASK_m) == 0) {
+				/* Hide background in leftmost 8 pixels */
+				p->pixels[y][x].priority = PPU_PRIO_NONE;
+				p->pixels[y][x].pal = 0;
+				p->pixels[y][x].c = p->read8(pal_start);
+			}
 		}
-
-		if (x < 8 && (p->regs[REG_PPUMASK] & PPUMASK_m) == 0) {
-			/* Hide background in leftmost 8 pixels */
+	} else {
+		if (x <= 0xff) {
 			p->pixels[y][x].priority = PPU_PRIO_NONE;
 			p->pixels[y][x].pal = 0;
 			p->pixels[y][x].c = p->read8(pal_start);
 		}
-	} else {
-		p->pixels[y][x].priority = PPU_PRIO_NONE;
-		p->pixels[y][x].pal = 0;
-		p->pixels[y][x].c = p->read8(pal_start);
 	}
+
+	if (x > 0xff)
+		return;
 
 	if (show_sprites) {
 		/* Sprite height (8 or 16 pixels) */
@@ -412,6 +419,9 @@ ppu_step(struct ppu_context *p)
 					/* Reload horizontal scroll position */
 					p->xscroll = (p->scroll >> 8) & 0xff;
 				}
+
+				ppu_put_pixel(p, scanline_cycle - 1, scanline);
+
 				/* Tile data for sprites on the next scanline are fetched (XXX) */
 			} else if (scanline_cycle >= 321 && scanline_cycle <= 336) {
 				/* First two tiles for the next scanline are fetched (XXX) */
