@@ -236,6 +236,10 @@ load_rom(const char *path)
 int
 main(int argc, char *argv[])
 {
+#ifdef CPU_TIMING_DEBUG
+	uint64_t lf_cputicks = 0;
+#endif
+
 	if (argc != 2)
 		usage(argv[0]);
 
@@ -266,7 +270,14 @@ main(int argc, char *argv[])
 		cpu_step(&avnes.c);
 
 		for (int i = 0; i < 3; i++) {
-			frame_complete += ppu_step(&avnes.p);
+			int status = ppu_step(&avnes.p);
+#ifdef CPU_TIMING_DEBUG
+			if (status && (avnes.p.frame % 60) == 0) {
+				printf("CPU frequency: %lu Hz\n", avnes.c.ticks - lf_cputicks);
+				lf_cputicks = avnes.c.ticks;
+			}
+#endif
+			frame_complete += status;
 		}
 
 		if (frame_complete) {
