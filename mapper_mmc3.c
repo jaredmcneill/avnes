@@ -197,11 +197,11 @@ mmc3_ppuaddr2romoffset(struct avnes_context *av, uint16_t addr)
 		/* Two 2KB banks at $0000-$0FFF, four 1KB banks at $1000-$1FFF */
 		if (addr >= 0x0000 && addr <= 0x07FF) {
 			/* 2KB switchable CHR ROM bank */
-			return (addr - 0x0000) + (mc->bank[0] * 0x800);
+			return (addr - 0x0000) + (mc->bank[0] * 0x400);
 		}
 		if (addr >= 0x0800 && addr <= 0x0FFF) {
 			/* 2KB switchable CHR ROM bank */
-			return (addr - 0x0800) + (mc->bank[1] * 0x800);
+			return (addr - 0x0800) + (mc->bank[1] * 0x400);
 		}
 		if (addr >= 0x1000 && addr <= 0x13FF) {
 			/* 1KB switchable CHR ROM bank */
@@ -223,11 +223,11 @@ mmc3_ppuaddr2romoffset(struct avnes_context *av, uint16_t addr)
 		/* Two 2KB banks at $1000-$1FFF, four 1KB banks at $0000-$1FFF */
 		if (addr >= 0x1000 && addr <= 0x17FF) {
 			/* 2KB switchable CHR ROM bank */
-			return (addr - 0x1000) + (mc->bank[0] * 0x800);
+			return (addr - 0x1000) + (mc->bank[0] * 0x400);
 		}
 		if (addr >= 0x1800 && addr <= 0x1FFF) {
 			/* 2KB switchable CHR ROM bank */
-			return (addr - 0x1800) + (mc->bank[1] * 0x800);
+			return (addr - 0x1800) + (mc->bank[1] * 0x400);
 		}
 		if (addr >= 0x0000 && addr <= 0x03FF) {
 			/* 1KB switchable CHR ROM bank */
