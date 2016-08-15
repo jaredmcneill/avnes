@@ -325,8 +325,16 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 				    sprite_tile : (sprite_tile & 0xfe);
 
 				/* Offset of pattern table entry (low) */
-				const uint16_t pat_off = sprite_tile_start * 16 +
+				uint16_t pat_off = sprite_tile_start * 16 +
 				    (flip_v ? ((sprite_height - 1) - (yrel & (sprite_height - 1))) : (yrel & (sprite_height - 1)));
+				if (yrel >= 8)
+					pat_off += 8;
+				if (sprite_height == 16 && flip_v) {
+					if (yrel >= 8)
+						pat_off -= 8;
+					else
+						pat_off += 8;
+				}
 
 				/* Pattern table entry */
 				const uint8_t pat_l = p->read8(pat_start + pat_off);
