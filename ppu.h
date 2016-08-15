@@ -72,6 +72,7 @@ struct ppu_pixel {
 #define	PPU_PRIO_FRONT		3
 	uint8_t pal;	/* palette entry */
 	uint8_t c;	/* colour value */
+	uint8_t has_sprite;
 };
 
 struct ppu_context {

@@ -258,6 +258,7 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 
 		if (x <= 0xff) {
 			p->pixels[y][x].pal = pal;
+			p->pixels[y][x].has_sprite = 0;
 
 			if (pal) {
 				p->pixels[y][x].priority = PPU_PRIO_BG;
@@ -285,6 +286,7 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 			p->pixels[y][x].priority = PPU_PRIO_NONE;
 			p->pixels[y][x].pal = 0;
 			p->pixels[y][x].c = p->read8(pal_start);
+			p->pixels[y][x].has_sprite = 0;
 		}
 	}
 
@@ -355,6 +357,12 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 						p->sprite0_hit = 1;
 					}
 				}
+
+				/* Non-transparent back-priority sprites with a lower sprite index have a higher priority */
+				if (p->pixels[y][x].has_sprite)
+					continue;
+				if (pal)
+					p->pixels[y][x].has_sprite = 1;
 
 				/* Skip pixels in front of this one. If sprites overlap, the lower numbered sprite wins. */
 				if (priority <= p->pixels[y][x].priority || pal == 0)
