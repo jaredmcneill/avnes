@@ -40,7 +40,7 @@ struct mmc3_context {
 
 	uint8_t bank[8];
 	int irq_enable;
-	int irq_pending;
+	int last_scanline;
 	uint8_t irq_counter;
 
 	uint8_t banksel;	/* Bank select */
@@ -174,7 +174,7 @@ mmc3_cpuwrite(struct avnes_context *av, uint16_t addr, uint8_t val)
 		if ((addr & 1) == 0) {
 			/* IRQ disable */
 			mc->irq_enable = 0;
-			mc->irq_pending = 0;
+			mc->irq_counter = 0;
 		} else {
 			/* IRQ enable */
 			mc->irq_enable = 1;
@@ -275,16 +275,15 @@ mmc3_ppuread(struct avnes_context *av, uint16_t addr)
 
 		if (scanline >= 0 && scanline <= 239) {
 			const unsigned int scanline_cycle = (tick % 341) - 1;
-			if (scanline_cycle == 256) {
+			if (scanline_cycle == 256 && mc->last_scanline != scanline) {
+				mc->last_scanline = scanline;
 				if (mc->irq_counter == 0)
-					mc->irq_counter = mc->irq_latch;
+					mc->irq_counter = mc->irq_latch + 1;
 				else
 					mc->irq_counter--;
 
-				if (mc->irq_counter == 0 && !mc->irq_pending) {
-					mc->irq_pending = 1;
-					if (mc->irq_enable)
-						cpu_irq(&av->c);
+				if (mc->irq_counter == 0 && mc->irq_enable) {
+					cpu_irq(&av->c);
 				}
 			}
 		}
