@@ -38,6 +38,33 @@
 #define nitems(x)	(sizeof((x)) / sizeof((x)[0]))
 #endif
 
+#ifdef __MACH__
+#include <mach/clock.h>
+#include <mach/mach.h>
+
+#define CLOCK_MONOTONIC	1
+
+static inline int
+clock_gettime(int clk_id, struct timespec *ts)
+{
+	static clock_serv_t cclock;
+	static int initialized = 0;
+	mach_timespec_t mts;
+
+	if (!initialized) {
+		host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &cclock);
+		initialized = 1;
+	}
+
+	clock_get_time(cclock, &mts);
+
+	ts->tv_sec = mts.tv_sec;
+	ts->tv_nsec = mts.tv_nsec;
+
+	return 0;
+}
+#endif
+
 #define	AVNES_RAM_SIZE		0x800	/* 2KB internal RAM */
 #define	AVNES_VRAM_SIZE		0x800	/* 2KB video RAM */
 #define	AVNES_PALETTERAM_SIZE	0x20	/* 32B palette RAM */

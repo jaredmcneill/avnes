@@ -31,6 +31,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "avnes.h"
 #include "ppu.h"
 
 #define	PPU_REG_MIN	0x2000
