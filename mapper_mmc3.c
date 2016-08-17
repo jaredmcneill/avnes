@@ -275,16 +275,15 @@ mmc3_ppuread(struct avnes_context *av, uint16_t addr)
 
 		if (scanline >= 0 && scanline <= 239) {
 			const unsigned int scanline_cycle = (tick % 341) - 1;
-			if (scanline_cycle == 256 && mc->last_scanline != scanline) {
+			if (scanline_cycle < 256 && mc->last_scanline != scanline) {
 				mc->last_scanline = scanline;
 				if (mc->irq_counter == 0)
 					mc->irq_counter = mc->irq_latch + 1;
 				else
 					mc->irq_counter--;
 
-				if (mc->irq_counter == 0 && mc->irq_enable) {
+				if (mc->irq_counter == 0 && mc->irq_enable)
 					cpu_irq(&av->c);
-				}
 			}
 		}
 
