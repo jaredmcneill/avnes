@@ -78,10 +78,8 @@ struct ppu_pixel {
 struct ppu_context {
 	struct cpu_context *c;
 	uint8_t	regs[PPU_NREG];
-	uint16_t vramaddr;
 	uint8_t oam[PPU_OAM_SIZE];
 	uint8_t oamaddr;
-	uint16_t scroll;
 
 	uint8_t ppudata;
 
@@ -92,8 +90,14 @@ struct ppu_context {
 #define	PPU_F_MIRROR_V		0x01
 #define	PPU_F_MIRROR_NONE	0x08
 
-	int latch_scroll;
-	int latch_addr;
+	uint16_t reg_v;	/* Current VRAM address (15 bits) */
+	uint16_t reg_t;	/* Temporary VRAM address (15 bits) */
+	uint8_t	reg_x;	/* Fine X scroll (3 bits) */
+	uint8_t reg_w;	/* First or second write toggle (1 bit) */
+
+	uint32_t attr;		/* Attribute buffer */
+	uint16_t tile_l;	/* Tile bitmap low */
+	uint16_t tile_h;	/* Tile bitmap high */
 
 	struct timespec next_vblank;
 
@@ -104,8 +108,6 @@ struct ppu_context {
 	uint64_t ticks;
 
 	int sprite0_hit;
-	int xscroll;
-	int yscroll;
 
 	void (*draw)(struct ppu_context *);
 	uint8_t (*read8)(uint16_t);

@@ -60,17 +60,62 @@
 #define	REG_PPUADDR	6
 #define	REG_PPUDATA	7
 
+#define	PPU_TILE_ADDR(v)	(0x2000 | ((v) & 0x0fff))
+#define	PPU_ATTR_ADDR(v)	(0x23c0 | ((v) & 0x0c00) | (((v) >> 4) & 0x38) | (((v) >> 2) & 0x07))
+
 static const struct timespec PPU_VBLANK_INTERVAL = {
 	.tv_sec = 0,
 	.tv_nsec = 1000000000 / 60000 * 1001
 };
 
+static uint16_t
+ppu_incr_x(struct ppu_context *p)
+{
+	uint16_t v = p->reg_v;
+
+	if ((v & 0x001f) == 31) {
+		v &= ~0x001f;
+		v ^= 0x0400;
+	} else {
+		v += 1;
+	}
+
+#ifdef PPU_DEBUG
+	printf("PPU INCX $%04X\n", v);
+#endif
+	return v;
+}
+
+static uint16_t
+ppu_incr_y(struct ppu_context *p)
+{
+	uint16_t v = p->reg_v;
+
+	if ((v & 0x7000) != 0x7000) {
+		v += 0x1000;
+	} else {
+		v &= ~0x7000;
+		uint16_t y = (v & 0x03e0) >> 5;
+		if (y == 29) {
+			y = 0;
+			v ^= 0x0800;
+		} else if (y == 31) {
+			y = 0;
+		} else {
+			y += 1;
+		}
+		v = (v & ~0x03e0) | (y << 5);
+	}
+
+#ifdef PPU_DEBUG
+	printf("PPU INCY $%04X\n", v);
+#endif
+	return v;
+}
+
 int
 ppu_init(struct ppu_context *p)
 {
-	p->latch_addr = 2;
-	p->latch_scroll = 2;
-
 	p->frame = 0;
 	p->frame_ticks = PPU_TICKS_PER_FRAME;
 
@@ -94,19 +139,20 @@ ppu_read(struct ppu_context *p, uint16_t addr)
 
 	//printf("  [%s] reg %d %02X\n", __func__, reg, p->regs[reg]);
 
-	val = p->regs[reg];
-
 	switch (reg) {
 	case REG_PPUSTATUS:
+		/* Get current state */
+		val = p->regs[reg];
+
 		/* Clear vblank flag */
 		p->regs[reg] &= ~PPUSTATUS_V;
 
-		/* Clear scroll and addr latches */
-		p->latch_scroll = 2;
-		p->latch_addr = 2;
+		/* Clear write toggle bit */
+		p->reg_w = 0;
+
 		break;
 	case REG_PPUDATA:
-		vaddr = p->vramaddr & (PPU_MEMMAP_SIZE - 1);
+		vaddr = p->reg_v & (PPU_MEMMAP_SIZE - 1);
 
 		if (vaddr <= 0x3eff) {
 			/* Emulate PPUDATA read buffer (post-fetch) */
@@ -116,9 +162,14 @@ ppu_read(struct ppu_context *p, uint16_t addr)
 			val = p->read8(vaddr);
 
 		incr = (p->regs[REG_PPUCTRL] & PPUCTRL_I) ? 32 : 1;
-		p->vramaddr = (p->vramaddr + incr) & (PPU_MEMMAP_SIZE - 1);
+		p->reg_v = (p->reg_v + incr) & (PPU_MEMMAP_SIZE - 1);
+#ifdef PPU_DEBUG
+		printf("PPUDATA r $%04X\n", p->reg_v);
+#endif
 		break;
-	case REG_PPUSCROLL:
+
+	default:
+		val = p->regs[reg];
 		break;
 	}
 
@@ -139,55 +190,82 @@ ppu_write(struct ppu_context *p, uint16_t addr, uint8_t val)
 
 	//printf("  [%s] reg %d %02X -> %02X\n", __func__, reg, p->regs[reg], val);
 
-	p->regs[reg] = val;
-
 	switch (reg) {
-	case REG_PPUADDR:
-		if (p->latch_addr == 0)
-			p->latch_addr = 2;
-		if (p->latch_addr > 0) {
-			//printf("PPU vramaddr %04X ", p->vramaddr);
-			p->vramaddr = (p->vramaddr << 8) | val;
-			//printf("-> %04X ", p->vramaddr);
-			--p->latch_addr;
+	case REG_PPUSCROLL:
+		if (p->reg_w == 0) {
+			/* First write */
+			p->reg_t &= ~0x1f;
+			p->reg_t |= (val >> 3);
+			p->reg_x = (val & 7);
+		} else {
+			/* Second write */
+			p->reg_t &= ~(0x1f << 5);
+			p->reg_t |= ((uint16_t)val >> 3) << 5;
+			p->reg_t &= ~(0x7 << 12);
+			p->reg_t |= ((uint16_t)val & 0x7) << 12;
 		}
-		if (p->latch_addr == 0) {
-			p->vramaddr &= (PPU_MEMMAP_SIZE - 1);
-			//printf("new PPUADDR $%04X\n", p->vramaddr);
-#if 0
-			if (p->vramaddr < 0x2000 || p->vramaddr > 0x3fff)
-				assert("Strange VRAM address" == NULL);
+		p->reg_w ^= 1;
+		p->regs[reg] = val;
+		break;
+
+	case REG_PPUADDR:
+		if (p->reg_w == 0) {
+			/* First write */
+			p->reg_t &= ~(0x3f << 8);
+			p->reg_t |= ((uint16_t)val & 0x3f) << 8;
+			p->reg_t &= ~(1 << 14);
+		} else {
+			/* Second write */
+			p->reg_t &= ~0xff;
+			p->reg_t |= val;
+			p->reg_v = p->reg_t;
+#ifdef PPU_DEBUG
+			printf("PPUADDR $%04X\n", p->reg_v);
 #endif
 		}
+		p->reg_w ^= 1;
+		p->regs[reg] = val;
 		break;
+
+	case REG_PPUCTRL:
+		p->regs[reg] = val;
+		p->reg_t &= ~(0x3 << 10);
+		p->reg_t |= ((uint16_t)val & 0x3) << 10;
+
+		break;
+
 	case REG_PPUDATA:
-		p->vramaddr &= (PPU_MEMMAP_SIZE - 1);
-		//printf("PPUDATA addr $%04X\n", p->vramaddr);
-		vaddr = p->vramaddr & (PPU_MEMMAP_SIZE - 1);
+		vaddr = p->reg_v & (PPU_MEMMAP_SIZE - 1);
 
 		p->write8(vaddr, val);
-#if 0
-		if (vaddr >= 0x3f00)
-			printf("PPU Palette write $%04X : $%02X\n", vaddr, val);
-#endif
+
 		incr = (p->regs[REG_PPUCTRL] & PPUCTRL_I) ? 32 : 1;
-		p->vramaddr = (p->vramaddr + incr) & (PPU_MEMMAP_SIZE - 1);
+		p->reg_v = (p->reg_v + incr) & (PPU_MEMMAP_SIZE - 1);
+
+#ifdef PPU_DEBUG
+		const unsigned int tick = PPU_TICKS_PER_FRAME - p->frame_ticks;
+		const int scanline = (tick / 341) - 1;
+		const unsigned int scanline_cycle = tick % 341;
+
+		printf("PPUDATA w $%04X (tick %d scanline %d dot %d)\n", p->reg_v, tick, scanline, scanline_cycle);
+#endif
 		break;
+
 	case REG_OAMADDR:
 		p->oamaddr = val;
+		p->regs[reg] = val;
 		break;
+
 	case REG_OAMDATA:
 		p->oam[p->oamaddr] = val;
 		p->oamaddr = (p->oamaddr + 1) & (PPU_OAM_SIZE - 1);
+		p->regs[reg] = val;
 		break;
-	case REG_PPUSCROLL:
-		if (p->latch_scroll == 0)
-			p->latch_scroll = 2;
-		if (p->latch_scroll > 0) {
-			p->scroll = (p->scroll << 8) | val;
-			--p->latch_scroll;
-		}
+
+	default:
+		p->regs[reg] = val;
 		break;
+
 	}
 }
 
@@ -212,50 +290,29 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 	const int show_background = (p->regs[REG_PPUMASK] & PPUMASK_b) != 0;
 	const int show_sprites = (p->regs[REG_PPUMASK] & PPUMASK_s) != 0;
 
-	/* X/Y scrolling */
-	const unsigned int xscroll = p->xscroll;
-	unsigned int yscroll = p->yscroll;
-
-	/* Base nametable address */
-	uint16_t nt_start = 0x2000 + (p->regs[REG_PPUCTRL] & PPUCTRL_N) * 0x400;
-	if (x + xscroll > 0xff)
-		nt_start ^= 0x400;
-	if (y + yscroll >= 0xf0)
-		nt_start ^= 0x800;
-
-	/* Attribute table starts at the end of the nametable */
-	const uint16_t attr_start = nt_start + 0x3c0;
 	/* Palette address */
 	const uint16_t pal_start = 0x3f00;
 
 	if (show_background) {
-		/* Background pattern table address */
-		const uint16_t pat_start = (p->regs[REG_PPUCTRL] & PPUCTRL_B) ? 0x1000 : 0x0000;
+		/* Fine Y scroll */
+		const uint8_t fine_y = p->reg_v >> 12;
+		const uint8_t fine_x = p->reg_x;
 
-		uint8_t xrel = (x + xscroll) & 0xff;
-		uint8_t yrel = (y + yscroll) & 0xff;
-		if (y + yscroll >= 0xf0)
-			yrel -= 0xf0;
-	
-		/* Offset of nametable entry */
-		uint16_t nt_off = ((yrel / 8) * 32) + (xrel / 8);
-		/* Offset of attribute table entry */
-		uint16_t attr_off = ((yrel / 32) * 8) + (xrel / 32);
+		/* X/Y scroll positions */
+		const int xscroll = x + p->reg_x;
+		const int yscroll = (((p->reg_v >> 5) & 0x1f) << 3) | fine_y;
 
-		/* Nametable entry */
-		const uint8_t nt = p->read8(nt_start + nt_off);
+		/* Colour set */
+		const uint8_t cs = (p->attr >> 30) & 3;
 
-		/* Offset of pattern table entry (low) */
-		const uint16_t pat_off = (uint16_t)nt * 16 + (yrel & 7);
-
-		/* Pattern table entry */
-		const uint8_t pat_l = p->read8(pat_start + pat_off);
-		const uint8_t pat_h = p->read8(pat_start + pat_off + 8);
-		/* Bit in pattern table */
-		const int bit = 7 - (xrel & 7);
 		/* Palette entry */
-		const uint8_t pal = ((pat_l & (1 << bit)) ? 1 : 0) |
-				    ((pat_h & (1 << bit)) ? 2 : 0);
+		const int bit = 1 << (15 - p->reg_x);
+		const uint8_t pal = ((p->tile_l & bit) ? 1 : 0) |
+				    ((p->tile_h & bit) ? 2 : 0);
+
+		p->tile_l <<= 1;
+		p->tile_h <<= 1;
+		p->attr <<= 2;
 
 		if (x <= 0xff) {
 			p->pixels[y][x].pal = pal;
@@ -263,10 +320,6 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 
 			if (pal) {
 				p->pixels[y][x].priority = PPU_PRIO_BG;
-				/* Attribute table entry */
-				const uint8_t attr = p->read8(attr_start + attr_off);
-				/* Colour set */
-				const uint8_t cs = ppu_get_cs_for_bgpixel(attr, x + xscroll, y + yscroll);
 
 				p->pixels[y][x].c = p->read8(pal_start + (cs * 4) + pal);
 			} else {
@@ -383,6 +436,44 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 	}
 }
 
+static void
+ppu_fetch(struct ppu_context *p)
+{
+	/* Nametable entry */
+	const uint8_t nt = p->read8(PPU_TILE_ADDR(p->reg_v));
+
+	/* Fine Y scroll */
+	const uint8_t fine_y = p->reg_v >> 12;
+	const uint8_t fine_x = p->reg_x;
+
+	/* X/Y scroll positions */
+	const int xscroll = ((p->reg_v & 0x1f) << 3) | fine_x;
+	const int yscroll = (((p->reg_v >> 5) & 0x1f) << 3) | fine_y;
+
+	/* Attribute table entry */
+	uint16_t attr = 0;
+	uint8_t curattr = p->read8(PPU_ATTR_ADDR(p->reg_v));
+	for (int i = 0; i < 8; i++) {
+		if (i == (8 - p->reg_x))
+			curattr = p->read8(PPU_ATTR_ADDR(ppu_incr_x(p)));
+		attr <<= 2;
+		attr |= ppu_get_cs_for_bgpixel(curattr, xscroll + i, yscroll);
+	}
+	p->attr |= attr;
+
+	/* Pattern table start offset */
+	const uint16_t pat_start = (p->regs[REG_PPUCTRL] & PPUCTRL_B) ? 0x1000 : 0x0000;
+
+	/* Offset of pattern table entry (low) */
+	const uint16_t pat_off = (uint16_t)nt * 16 + (p->reg_v >> 12);
+			
+	/* Pattern table entry */
+	p->tile_l |= p->read8(pat_start + pat_off);
+	p->tile_h |= p->read8(pat_start + pat_off + 8);
+
+	p->reg_v = ppu_incr_x(p);
+}
+
 int
 ppu_step(struct ppu_context *p)
 {
@@ -414,17 +505,26 @@ ppu_step(struct ppu_context *p)
 		const int scanline = (tick / 341) - 1;
 		const unsigned int scanline_cycle = tick % 341;
 
-		if (scanline == -1) {
+		/* Rendering control flags */
+		const int show_background = (p->regs[REG_PPUMASK] & PPUMASK_b) != 0;
+		const int show_sprites = (p->regs[REG_PPUMASK] & PPUMASK_s) != 0;
+		const int render_enable = show_background && show_sprites;
+
+		if (render_enable && scanline == -1) {
 			/* Pre-render scanline */
 			if (scanline_cycle == 1) {
 				/* Clear VBlank, Sprite 0 Hit */
 				p->regs[REG_PPUSTATUS] &= ~(PPUSTATUS_S | PPUSTATUS_V);
 				p->sprite0_hit = 0;
-			} else if (scanline_cycle == 280) {
+			} else if (scanline_cycle >= 280 && scanline_cycle <= 304) {
 				/* Reload vertical scroll position */
-				p->yscroll = p->scroll & 0xff;
+				p->reg_v &= ~0x7be0;
+				p->reg_v |= (p->reg_t & 0x7be0);
+#ifdef PPU_DEBUG
+				printf("PPU V   $%04X\n", p->reg_v);
+#endif
 			}
-		} else if (scanline >= 0 && scanline <= 239) {
+		} else if (render_enable && scanline >= 0 && scanline <= 239) {
 			/* Visible scanlines */
 			if (scanline_cycle == 0) {
 				/* Idle cycle */
@@ -432,13 +532,6 @@ ppu_step(struct ppu_context *p)
 				/* Fetch cycle */
 				ppu_put_pixel(p, scanline_cycle - 1, scanline);
 			} else if (scanline_cycle >= 257 && scanline_cycle <= 320) {
-				if (scanline_cycle == 257) {
-					/* Reload horizontal scroll position */
-					p->xscroll = (p->scroll >> 8) & 0xff;
-				}
-
-				ppu_put_pixel(p, scanline_cycle - 1, scanline);
-
 				/* Tile data for sprites on the next scanline are fetched (XXX) */
 			} else if (scanline_cycle >= 321 && scanline_cycle <= 336) {
 				/* First two tiles for the next scanline are fetched (XXX) */
@@ -454,8 +547,36 @@ ppu_step(struct ppu_context *p)
 				p->regs[REG_PPUSTATUS] |= PPUSTATUS_V;
 
 				/* VBlank NMI */
-				if (p->regs[REG_PPUCTRL] & PPUCTRL_V)
+				if (p->regs[REG_PPUCTRL] & PPUCTRL_V) {
 					cpu_nmi(p->c);
+				}
+			}
+		}
+
+		if (render_enable && scanline >= -1 && scanline <= 239) {
+			if (scanline_cycle > 0 && (scanline_cycle & 7) == 0 && scanline_cycle < 256) {
+				ppu_fetch(p);
+			}
+			if (scanline_cycle == 256) {
+				p->reg_v = ppu_incr_y(p);
+			}
+			if (scanline_cycle == 257) {
+				/* Reload horizontal scroll position */
+				p->reg_v &= ~0x41f;
+				p->reg_v |= (p->reg_t & 0x41f);
+#ifdef PPU_DEBUG
+				printf("PPU H   $%04X\n", p->reg_v);
+#endif
+			}
+
+			if (scanline_cycle == 321) {
+				p->tile_l = p->tile_h = 0;
+				ppu_fetch(p);
+				p->tile_l <<= 8;
+				p->tile_h <<= 8;
+				p->attr <<= 16;
+			} else if (scanline_cycle == 329) {
+				ppu_fetch(p);
 			}
 		}
 
