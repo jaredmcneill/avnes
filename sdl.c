@@ -88,10 +88,10 @@ sdl_init(const char *filename)
 
 			for (int i = 0; i < sizeof(joymap); i++)
 				joymap[i] = 0x00;
-			joymap[0] = IO_BUTTON_START;
-			joymap[1] = IO_BUTTON_SELECT;
-			joymap[7] = IO_BUTTON_B;
-			joymap[8] = IO_BUTTON_A;
+			joymap[7] = IO_BUTTON_START;
+			joymap[6] = IO_BUTTON_SELECT;
+			joymap[1] = IO_BUTTON_B;
+			joymap[0] = IO_BUTTON_A;
 		}
 	}
 
@@ -240,17 +240,17 @@ sdl_poll(struct io_context *io)
 		switch (event.jaxis.axis) {
 		case 0:
 			io->state[0] &= ~(IO_BUTTON_LEFT|IO_BUTTON_RIGHT);
-			if (event.jaxis.value == -32768)
+			if (event.jaxis.value <= -16384)
 				io->state[0] |= IO_BUTTON_LEFT;
-			else if (event.jaxis.value == 32767)
+			else if (event.jaxis.value >= 16387)
 				io->state[0] |= IO_BUTTON_RIGHT;
 			break;
 		case 1:
 			io->state[0] &= ~(IO_BUTTON_UP|IO_BUTTON_DOWN);
-			if (event.jaxis.value == -32768)
-				io->state[0] |= IO_BUTTON_DOWN;
-			else if (event.jaxis.value == 32767)
+			if (event.jaxis.value <= -16384)
 				io->state[0] |= IO_BUTTON_UP;
+			else if (event.jaxis.value >= 16387)
+				io->state[0] |= IO_BUTTON_DOWN;
 			break;
 		}
 		return 0;
