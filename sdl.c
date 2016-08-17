@@ -211,6 +211,7 @@ sdl_poll(struct io_context *io)
 
 		if (event.key.keysym.sym == SDLK_f && event.key.state == SDL_RELEASED) {
 			fullscreen ^= 1;
+			SDL_ShowCursor(fullscreen ? SDL_DISABLE : SDL_ENABLE);
 			SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
 			return 0;
 		}
