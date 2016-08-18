@@ -62,6 +62,8 @@ static SDL_Renderer *renderer;
 static SDL_Texture *texture;
 static uint8_t fbmem[PPU_WIDTH * PPU_HEIGHT * 4];
 static int fullscreen = 0;
+static int overscan = 0;
+static SDL_Rect rect_overscan = { .x = 8, .y = 8, .w = PPU_WIDTH - 16, .h = PPU_HEIGHT - 16 };
 
 int
 sdl_init(const char *filename)
@@ -133,6 +135,7 @@ void
 sdl_draw(struct ppu_context *p)
 {
 	uint8_t *fb = fbmem;
+	SDL_Rect *src;
 
 	for (unsigned int y = 0; y < PPU_HEIGHT; y++) {
 		for (unsigned int x = 0; x < PPU_WIDTH; x++) {
@@ -147,8 +150,10 @@ sdl_draw(struct ppu_context *p)
 
 	SDL_UpdateTexture(texture, NULL, fbmem, PPU_WIDTH * 4);
 
+	src = overscan ? &rect_overscan : NULL;
+
 	SDL_RenderClear(renderer);
-	SDL_RenderCopy(renderer, texture, NULL, NULL);
+	SDL_RenderCopy(renderer, texture, src, NULL);
 	SDL_RenderPresent(renderer);
 }
 
@@ -213,6 +218,11 @@ sdl_poll(struct io_context *io)
 			fullscreen ^= 1;
 			SDL_ShowCursor(fullscreen ? SDL_DISABLE : SDL_ENABLE);
 			SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+			return 0;
+		}
+
+		if (event.key.keysym.sym == SDLK_o && event.key.state == SDL_RELEASED) {
+			overscan ^= 1;
 			return 0;
 		}
 
