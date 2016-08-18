@@ -508,7 +508,7 @@ ppu_step(struct ppu_context *p)
 		/* Rendering control flags */
 		const int show_background = (p->regs[REG_PPUMASK] & PPUMASK_b) != 0;
 		const int show_sprites = (p->regs[REG_PPUMASK] & PPUMASK_s) != 0;
-		const int render_enable = show_background && show_sprites;
+		const int render_enable = show_background || show_sprites;
 
 		if (render_enable && scanline == -1) {
 			/* Pre-render scanline */
