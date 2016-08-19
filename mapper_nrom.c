@@ -44,16 +44,17 @@ struct nrom_context {
 static uint8_t
 nrom_cpuread(struct avnes_context *av, uint16_t addr)
 {
-	assert(addr >= 0x8000 && addr <= 0xFFFF);
+	if (addr >= 0x8000 && addr <= 0xFFFF)
+		return av->rom_data[av->prg_start + ((addr - 0x8000) & (av->prg_len - 1))];
 
-	return av->rom_data[av->prg_start + ((addr - 0x8000) & (av->prg_len - 1))];
+	printf("[%s] CPU address $%04X not mapped\n", __func__, addr);
+	return 0;
 }
 
 static void
 nrom_cpuwrite(struct avnes_context *av, uint16_t addr, uint8_t val)
 {
-	assert(addr >= 0x8000 && addr <= 0xFFFF);
-	assert("Write attempt to NROM ROM bank" == NULL);
+	printf("[%s] CPU address $%04X not mapped\n", __func__, addr);
 }
 
 static uint8_t
@@ -90,7 +91,7 @@ nrom_ppuread(struct avnes_context *av, uint16_t addr)
 	}
 
 	printf("[%s] PPU address $%04X not mapped\n", __func__, addr);
-	abort();
+	return 0;
 }
 
 static void
@@ -124,7 +125,6 @@ nrom_ppuwrite(struct avnes_context *av, uint16_t addr, uint8_t val)
 	}
 
 	printf("[%s] PPU address $%04X not mapped\n", __func__, addr);
-	abort();
 }
 
 static int

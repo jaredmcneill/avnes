@@ -53,7 +53,7 @@ cnrom_cpuread(struct avnes_context *av, uint16_t addr)
 	}
 
 	printf("[%s] CPU address $%04X not mapped\n", __func__, addr);
-	abort();
+	return 0;
 }
 
 static void
@@ -108,7 +108,7 @@ cnrom_ppuread(struct avnes_context *av, uint16_t addr)
 	}
 
 	printf("[%s] PPU address $%04X not mapped\n", __func__, addr);
-	abort();
+	return 0;
 }
 
 static void
@@ -141,7 +141,6 @@ cnrom_ppuwrite(struct avnes_context *av, uint16_t addr, uint8_t val)
 	}
 
 	printf("[%s] PPU address $%04X not mapped\n", __func__, addr);
-	abort();
 }
 
 static int
