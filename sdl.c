@@ -56,7 +56,10 @@ static unsigned int ntscpalette_pal_len = 192;
 
 static uint8_t joymap[256];
 
-static SDL_Joystick *joy;
+#define	SDL_NUM_CONTROLLERS	2
+
+static SDL_GameController *controller[SDL_NUM_CONTROLLERS];
+static SDL_JoystickID controller_id[SDL_NUM_CONTROLLERS];
 static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *texture;
@@ -70,32 +73,48 @@ sdl_init(const char *filename)
 {
 	char *window_title;
 	int window_width, window_height;
-	int error;
+	int controller_index, i, error;
 
 	/* Emulate 8:7 PAR */
 	window_width = PPU_WIDTH * 2 * 8 / 7;
 	window_height = PPU_HEIGHT * 2;
 
-	error = SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK);
+	error = SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER);
 	if (error != 0) {
 		fprintf(stderr, "Couldn't init SDL: %s\n", SDL_GetError());
 		return ENXIO;
 	}
 	atexit(SDL_Quit);
 
-	if (SDL_NumJoysticks() > 0) {
-		joy = SDL_JoystickOpen(0);
-		if (joy) {
-			printf("Using Joystick 0 (%s) for controller port 1\n", SDL_JoystickName(joy));
+	for (i = 0; i < sizeof(joymap); i++)
+		joymap[i] = 0;
+	/* Button mapping. Yes, B is A... */
+	joymap[SDL_CONTROLLER_BUTTON_A] = IO_BUTTON_B;
+	joymap[SDL_CONTROLLER_BUTTON_B] = IO_BUTTON_A;
+	joymap[SDL_CONTROLLER_BUTTON_BACK] = IO_BUTTON_SELECT;
+	joymap[SDL_CONTROLLER_BUTTON_START] = IO_BUTTON_START;
 
-			for (int i = 0; i < sizeof(joymap); i++)
-				joymap[i] = 0x00;
-			joymap[7] = IO_BUTTON_START;
-			joymap[6] = IO_BUTTON_SELECT;
-			joymap[1] = IO_BUTTON_B;
-			joymap[0] = IO_BUTTON_A;
+	if (SDL_GameControllerAddMappingsFromFile("gamecontrollerdb.txt") == -1)
+		fprintf(stderr, "Couldn't load game controller mappings from gamecontrollerdb.txt: %s\n", SDL_GetError());
+
+	controller_index = 0;
+	for (i = 0; i < SDL_NumJoysticks() && controller_index < SDL_NUM_CONTROLLERS; i++) {
+		if (!SDL_IsGameController(i)) {
+			char buf[33];
+			SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(i), buf, sizeof(buf));
+			printf("Joystick #%d (%s) is not a game controller\n", i, buf);
+			continue;
 		}
+		controller[controller_index] = SDL_GameControllerOpen(i);
+		if (controller[controller_index] == NULL) {
+			fprintf(stderr, "Couldn't open game controller %i: %s\n", i, SDL_GetError());
+			continue;
+		}
+		controller_id[controller_index] = i;
+		controller_index++;
 	}
+	for (i = 0; i < SDL_NUM_CONTROLLERS; i++)
+		printf("Gamepad #%d: %s\n", i + 1, controller[i] ? SDL_GameControllerName(controller[i]) : "<none>");
 
 	error = asprintf(&window_title, "avnes - %s", filename);
 	if (error == -1) {
@@ -192,12 +211,27 @@ sdl_keytobutton(struct io_context *io, SDL_KeyboardEvent *key)
 	return btn;
 }
 
+static int
+sdl_get_controller(SDL_JoystickID id)
+{
+	int i;
+
+	for (i = 0; i < SDL_NUM_CONTROLLERS; i++) {
+		if (controller[i] == NULL)
+			continue;
+		if (controller_id[i] == id)
+			return i;
+	}
+
+	return -1;
+}
+
 int
 sdl_poll(struct io_context *io)
 {
 	SDL_Event event;
 	uint8_t btn;
-	int pending;
+	int pending, index;
 
 	pending = SDL_PollEvent(&event);
 	if (!pending)
@@ -235,33 +269,41 @@ sdl_poll(struct io_context *io)
 
 		return 0;
 
-	case SDL_JOYBUTTONDOWN:
-	case SDL_JOYBUTTONUP:
-		btn = joymap[event.jbutton.button];
+	case SDL_CONTROLLERBUTTONDOWN:
+	case SDL_CONTROLLERBUTTONUP:
+		index = sdl_get_controller(event.caxis.which);
+		if (index == -1)
+			return 0;
+
+		btn = joymap[event.cbutton.button];
 		if (btn) {
-			if (event.jbutton.state == SDL_PRESSED)
-				io->state[0] |= btn;
+			if (event.cbutton.state == SDL_PRESSED)
+				io->state[index] |= btn;
 			else
-				io->state[0] &= ~btn;
+				io->state[index] &= ~btn;
 		}
 
 		return 0;
 
-	case SDL_JOYAXISMOTION:
-		switch (event.jaxis.axis) {
-		case 0:
-			io->state[0] &= ~(IO_BUTTON_LEFT|IO_BUTTON_RIGHT);
-			if (event.jaxis.value <= -16384)
-				io->state[0] |= IO_BUTTON_LEFT;
-			else if (event.jaxis.value >= 16387)
-				io->state[0] |= IO_BUTTON_RIGHT;
+	case SDL_CONTROLLERAXISMOTION:
+		index = sdl_get_controller(event.caxis.which);
+		if (index == -1)
+			return 0;
+
+		switch (event.caxis.axis) {
+		case SDL_CONTROLLER_AXIS_LEFTX:
+			io->state[index] &= ~(IO_BUTTON_LEFT|IO_BUTTON_RIGHT);
+			if (event.caxis.value <= -16384)
+				io->state[index] |= IO_BUTTON_LEFT;
+			else if (event.caxis.value >= 16387)
+				io->state[index] |= IO_BUTTON_RIGHT;
 			break;
-		case 1:
-			io->state[0] &= ~(IO_BUTTON_UP|IO_BUTTON_DOWN);
-			if (event.jaxis.value <= -16384)
-				io->state[0] |= IO_BUTTON_UP;
-			else if (event.jaxis.value >= 16387)
-				io->state[0] |= IO_BUTTON_DOWN;
+		case SDL_CONTROLLER_AXIS_LEFTY:
+			io->state[index] &= ~(IO_BUTTON_UP|IO_BUTTON_DOWN);
+			if (event.caxis.value <= -16384)
+				io->state[index] |= IO_BUTTON_UP;
+			else if (event.caxis.value >= 16387)
+				io->state[index] |= IO_BUTTON_DOWN;
 			break;
 		}
 		return 0;
