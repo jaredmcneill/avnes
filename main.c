@@ -243,12 +243,12 @@ main(int argc, char *argv[])
 	if (argc != 2)
 		usage(argv[0]);
 
-	if (sdl_init(basename(argv[1])) != 0)
-		return EXIT_FAILURE;
-
 	/* Load ROM */
 	if (load_rom(argv[1]) != 0)
 		errx(EXIT_FAILURE, "Couldn't load ROM %s", argv[1]);
+
+	if (sdl_init(basename(argv[1])) != 0)
+		return EXIT_FAILURE;
 
 	memset(&avnes.c, 0, sizeof(avnes.c));
 	avnes.c.read8 = nes_cpuread8;
