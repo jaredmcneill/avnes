@@ -1719,6 +1719,9 @@ cpu_irq(struct cpu_context *c)
 {
 	struct cpu_frame *f = &c->frame;
 
+	if (f->P & P_I)
+		return;	/* interrupts disabled */
+
 	/* Push PC and P to stack */
 	cpu_stackpush(c, f->PC >> 8);
 	cpu_stackpush(c, f->PC & 0xff);
