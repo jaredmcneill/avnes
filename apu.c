@@ -45,6 +45,11 @@
 #define	REG_PULSE2_LLLLLLLL	0x4006
 #define	REG_PULSE2_LLLLLHHH	0x4007
 
+/* Triangle channel (write) */
+#define	REG_TRIANGLE_CRRRRRRR	0x4008
+#define	REG_TRIANGLE_LLLLLLLL	0x400a
+#define	REG_TRIANGLE_LLLLLHHH	0x400b
+
 /* Status */
 #define	REG_STATUS		0x4015
 
@@ -58,6 +63,13 @@ apu_pulse_sequence[4][8] = {
 	[1] = { 0, 1, 1, 0, 0, 0, 0, 0 },	/* 25% */
 	[2] = { 0, 1, 1, 1, 1, 0, 0, 0 },	/* 50% */
 	[3] = { 1, 0, 0, 1, 1, 1, 1, 1 },	/* 75% (25% negated) */
+};
+
+/* APU triangle waveform sequence */
+static uint8_t
+apu_triangle_sequence[32] = {
+	15, 14, 13, 12, 11, 10,  9,  8,  7,  6,  5,  4,  3,  2,  1,  0,
+	 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
 };
 
 /* APU length counter table */
@@ -87,6 +99,12 @@ apu_read(struct apu_context *a, uint16_t addr)
 			val |= 0x40;
 			a->status.frame_interrupt = 0;
 		}
+		if (a->status.pulse_enable[0] && a->pulse[0].length_counter > 0)
+			val |= 0x01;
+		if (a->status.pulse_enable[1] && a->pulse[1].length_counter > 0)
+			val |= 0x02;
+		if (a->status.triangle_enable && a->triangle.length_counter > 0)
+			val |= 0x04;
 #ifdef APU_DEBUG
 		printf("[%s] status = $%02X\n", __func__, val);
 #endif
@@ -106,6 +124,7 @@ void
 apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 {
 	struct apu_pulse *ap;
+	struct apu_triangle *at;
 
 	switch (addr) {
 	case REG_PULSE1_DDLCNNNN:
@@ -148,8 +167,35 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 		ap = addr == REG_PULSE1_LLLLLHHH ? &a->pulse[0] : &a->pulse[1];
 
 		ap->timer &= ~(0x7 << 8);
-		ap->timer |= (val & 0x7) << 8;
+		ap->timer |= ((uint16_t)val & 0x7) << 8;
 		ap->length = (val & 0xf8) >> 3;
+
+		break;
+
+	case REG_TRIANGLE_CRRRRRRR:
+		at = &a->triangle;
+
+		at->length_counter_halt = (val & 0x80) ? 1 : 0;
+		at->counter_reload = (val & 0x7f);
+
+		break;
+
+	case REG_TRIANGLE_LLLLLLLL:
+		at = &a->triangle;
+
+		at->timer &= ~0xff;
+		at->timer |= val;
+
+		break;
+
+	case REG_TRIANGLE_LLLLLHHH:
+		at = &a->triangle;
+
+		at->timer &= ~(0x7 << 8);
+		at->timer |= ((uint16_t)val & 0x7) << 8;
+		at->length = (val & 0xf8) >> 3;
+
+		at->linear_counter_reload = 1;
 
 		break;
 
@@ -199,42 +245,66 @@ apu_pulse_step(struct apu_context *a, struct apu_pulse *ap)
 	ap->timer_counter = ap->timer;
 }
 
+static void
+apu_triangle_step(struct apu_context *a, struct apu_triangle *at)
+{
+	if (at->timer_counter > 0) {
+		--at->timer_counter;
+		return;
+	}
+
+	at->seqval = apu_triangle_sequence[at->seqno];
+
+	/* Increment sequencer step number */
+	at->seqno = (at->seqno + 1) & 0x1f;
+
+	at->timer_counter = at->timer + 1;
+}
+
 int
 apu_step(struct apu_context *a)
 {
 	const int last_cycle = a->counter.mode ? APU_CYCLE(18641,0) : APU_CYCLE(14914,0);
 	const int half_cycle = a->cycle & 1;
-	int irq = 0, length_counter = 0;
+	int irq = 0, length_counter = 0, linear_counter = 0;
 
+	/* Pulse channel timers run at APU (CPU/2) rate */
 	if (!half_cycle) {
 		if (a->status.pulse_enable[0])
 			apu_pulse_step(a, &a->pulse[0]);
 		if (a->status.pulse_enable[1])
 			apu_pulse_step(a, &a->pulse[1]);
 	}
-
-	if (a->play)
-		a->play(a);
+	/* Triangle channel timer runs at CPU rate */
+	if (a->status.triangle_enable)
+		apu_triangle_step(a, &a->triangle);
 
 	switch (a->cycle) {
 	case APU_CYCLE(3728,5):
+		linear_counter = 1;
 		break;
 	case APU_CYCLE(7456,5):
+		linear_counter = 1;
 		length_counter = 1;
 		break;
 	case APU_CYCLE(11185,5):
+		linear_counter = 1;
 		break;
 	case APU_CYCLE(14914,0):
 		irq = 1;
 		break;
 	case APU_CYCLE(14914,5):
 		irq = 1;
-		if (a->counter.mode == 0)
+		if (a->counter.mode == 0) {
 			length_counter = 1;
+			linear_counter = 1;
+		}
 		break;
 	case APU_CYCLE(18640,5):
-		if (a->counter.mode == 1)
+		if (a->counter.mode == 1) {
 			length_counter = 1;
+			linear_counter = 1;
+		}
 		break;
 	}
 
@@ -259,7 +329,34 @@ apu_step(struct apu_context *a)
 				a->pulse[1].seqval = 0;
 			}
 		}
+		if (a->status.triangle_enable && !a->triangle.length_counter_halt) {
+			a->triangle.length_counter--;
+			if (a->triangle.length_counter == 0) {
+				a->status.triangle_enable = 0;
+				a->triangle.length_counter = a->triangle.linear_counter = 0;
+				a->triangle.seqval = 0;
+			}
+		}
 	}
+	if (linear_counter) {
+		if (a->status.triangle_enable) {
+			if (a->triangle.linear_counter_reload) {
+				a->triangle.linear_counter = a->triangle.counter_reload;
+			} else if (a->triangle.linear_counter > 0) {
+				a->triangle.linear_counter--;
+			}
+			if (!a->triangle.length_counter_halt) {
+				a->triangle.linear_counter_reload = 0;
+			}
+			if (a->triangle.linear_counter == 0) {
+				a->status.triangle_enable = 0;
+				a->triangle.seqval = 0;
+			}
+		}
+	}
+
+	if (a->play)
+		a->play(a);
 
 	if (irq && a->counter.mode == 0 && a->counter.interrupt_inhibit == 0) {
 		a->status.frame_interrupt = 1;

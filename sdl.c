@@ -53,7 +53,7 @@ static uint8_t ntscpalette_pal[] = {
   0xd9, 0xda, 0x9d, 0xc9, 0xe2, 0x9e, 0xbc, 0xe6, 0xae, 0xb4, 0xe5, 0xc7,
   0xb5, 0xdf, 0xe4, 0xa9, 0xa9, 0xa9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
-static unsigned int ntscpalette_pal_len = 192;
+static const unsigned int ntscpalette_pal_len = 192;
 
 static uint8_t joymap[256];
 
@@ -70,7 +70,10 @@ static int overscan = 0;
 static SDL_Rect rect_overscan = { .x = 8, .y = 8, .w = PPU_WIDTH - 16, .h = PPU_HEIGHT - 16 };
 
 static SDL_AudioDeviceID audiodev;
-static float audio_pulse_table[32];
+static float audio_pulse_table[31];
+static const unsigned int audio_pulse_table_len = 31;
+static float audio_tnd_table[203];
+static const unsigned int audio_tnd_table_len = 203;
 
 static void
 sdl_init_audio(void)
@@ -114,8 +117,10 @@ sdl_init(const char *filename)
 
 	sdl_init_audio();
 
-	for (i = 0; i < 32; i++)
+	for (i = 0; i < audio_pulse_table_len; i++)
 		audio_pulse_table[i] = 95.52 / (8128.0 / i + 100);
+	for (i = 0; i < audio_tnd_table_len; i++)
+		audio_tnd_table[i] = 163.67 / (24329.0 / i + 100);
 
 	for (i = 0; i < sizeof(joymap); i++)
 		joymap[i] = 0;
@@ -210,11 +215,11 @@ sdl_draw(struct ppu_context *p)
 void
 sdl_play(struct apu_context *a)
 {
-	float sample, pulse_out;
-	uint8_t pulse1, pulse2;
+	float sample, pulse_out, tnd_out;
+	uint8_t pulse1, pulse2, triangle, noise, dmc;
 
 	sample = 0.0;
-	pulse1 = pulse2 = 0;
+	pulse1 = pulse2 = triangle = noise = dmc = 0;
 
 	if (a->status.pulse_enable[0] && a->pulse[0].timer >= 8) {
 		pulse1 = a->pulse[0].seqval ? a->pulse[0].vol_env_div_period : 0;
@@ -224,7 +229,11 @@ sdl_play(struct apu_context *a)
 	}
 	pulse_out = audio_pulse_table[pulse1 + pulse2];
 
-	sample = pulse_out;
+	if (a->status.triangle_enable && a->triangle.timer >= 8)
+		triangle = a->triangle.seqval;
+	tnd_out = audio_tnd_table[3 * triangle + 2 * noise + dmc];
+
+	sample = pulse_out + tnd_out;
 
 	SDL_QueueAudio(audiodev, &sample, sizeof(sample));
 }

@@ -67,6 +67,25 @@ struct apu_pulse {
 	uint8_t			seqval;
 };
 
+struct apu_triangle {
+	uint8_t			length_counter_halt : 1;
+	uint8_t			counter_reload : 7;
+
+	uint16_t		timer : 11;
+	uint16_t		timer_counter : 11;
+
+	uint8_t			length : 5;
+	uint8_t			length_counter : 5;
+
+	uint8_t			linear_counter : 7;
+
+	uint8_t			linear_counter_reload : 1;
+
+	/* Sequencer state */
+	uint8_t			seqno;
+	uint8_t			seqval;
+};
+
 struct apu_context {
 	struct cpu_context	*c;
 
@@ -74,6 +93,7 @@ struct apu_context {
 	struct apu_frame_counter counter;
 
 	struct apu_pulse	pulse[2];
+	struct apu_triangle	triangle;
 
 	int			cycle;
 
