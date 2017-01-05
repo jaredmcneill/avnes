@@ -262,6 +262,9 @@ ppu_write(struct ppu_context *p, uint16_t addr, uint8_t val)
 		p->regs[reg] = val;
 		break;
 
+	case REG_PPUSTATUS:
+		break;
+
 	default:
 		p->regs[reg] = val;
 		break;
