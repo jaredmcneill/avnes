@@ -206,15 +206,21 @@ sdl_draw(struct ppu_context *p)
 void
 sdl_play(struct apu_context *a)
 {
-	float sample;
+	float sample, pulse_out;
+	uint8_t pulse1, pulse2;
 
 	sample = 0.0;
+	pulse1 = pulse2 = 0;
+
 	if (a->status.pulse_enable[0] && a->pulse[0].timer >= 8) {
-		sample += a->pulse[0].seqval ? 0.50 : 0;
+		pulse1 = a->pulse[0].seqval ? a->pulse[0].vol_env_div_period : 0;
 	}
 	if (a->status.pulse_enable[1] && a->pulse[1].timer >= 8) {
-		sample += a->pulse[1].seqval ? 0.50 : 0;
+		pulse2 = a->pulse[1].seqval ? a->pulse[1].vol_env_div_period : 0;
 	}
+	pulse_out = 0.00752 * (pulse1 + pulse2);
+
+	sample = pulse_out;
 
 	SDL_QueueAudio(audiodev, &sample, sizeof(sample));
 }
