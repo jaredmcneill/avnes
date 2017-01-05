@@ -31,6 +31,7 @@
 #include <SDL.h>
 
 #include "io.h"
+#include "apu.h"
 #include "ppu.h"
 #include "sdl.h"
 
@@ -76,7 +77,8 @@ sdl_init_audio(void)
 	SDL_AudioSpec want, have;
 
 	SDL_memset(&want, 0, sizeof(want));
-	want.freq = 48000;
+	//want.freq = 48000;
+	want.freq = 1789773;
 	want.format = AUDIO_F32;
 	want.channels = 1;
 	want.samples = 4096;
@@ -199,6 +201,22 @@ sdl_draw(struct ppu_context *p)
 	SDL_RenderClear(renderer);
 	SDL_RenderCopy(renderer, texture, src, NULL);
 	SDL_RenderPresent(renderer);
+}
+
+void
+sdl_play(struct apu_context *a)
+{
+	float sample;
+
+	sample = 0.0;
+	if (a->status.pulse_enable[0] && a->pulse[0].timer >= 8) {
+		sample += a->pulse[0].seqval ? 0.50 : 0;
+	}
+	if (a->status.pulse_enable[1] && a->pulse[1].timer >= 8) {
+		sample += a->pulse[1].seqval ? 0.50 : 0;
+	}
+
+	SDL_QueueAudio(audiodev, &sample, sizeof(sample));
 }
 
 static uint8_t

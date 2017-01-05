@@ -82,8 +82,7 @@ nes_cpuread8(uint16_t addr)
 
 	/* APU */
 	if (addr >= NES_APU_MINADDR && addr <= NES_APU_MAXADDR) {
-		//printf("TODO APU read $%04X\n", addr);
-		return 0;
+		return apu_read(&avnes.a, addr);
 	}
 
 	/* Controller */
@@ -132,12 +131,12 @@ nes_cpuwrite8(uint16_t addr, uint8_t val)
 
 	/* APU */
 	if (addr >= NES_APU_MINADDR && addr <= NES_APU_MAXADDR) {
-		//printf("TODO APU write $%04X\n", addr);
+		apu_write(&avnes.a, addr, val);
 		return;
 	}
 	if (addr == NES_IO_CONTROLLER_2) {
 		/* Writes to $4017 are for APU frame counter register */
-		//printf("TODO APU write $%04X\n", addr);
+		apu_write(&avnes.a, addr, val);
 		return;
 	}
 
@@ -255,6 +254,13 @@ main(int argc, char *argv[])
 	avnes.c.write8 = nes_cpuwrite8;
 	cpu_init(&avnes.c);
 
+	memset(&avnes.a, 0, sizeof(avnes.a));
+	avnes.a.c = &avnes.c;
+	avnes.a.play = sdl_play;
+	avnes.a.read8 = nes_cpuread8;
+	avnes.a.write8 = nes_cpuwrite8;
+	apu_init(&avnes.a);
+
 	memset(&avnes.p, 0, sizeof(avnes.p));
 	avnes.p.c = &avnes.c;
 	avnes.p.draw = sdl_draw;
@@ -268,6 +274,7 @@ main(int argc, char *argv[])
 		int frame_complete = 0;
 
 		cpu_step(&avnes.c);
+		apu_step(&avnes.a);
 
 		for (int i = 0; i < 3; i++) {
 			int status = ppu_step(&avnes.p);

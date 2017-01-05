@@ -33,5 +33,6 @@
 int	sdl_init(const char *);
 int	sdl_poll(struct io_context *);
 void	sdl_draw(struct ppu_context *);
+void	sdl_play(struct apu_context *);
 
 #endif /* !_SDL_H */

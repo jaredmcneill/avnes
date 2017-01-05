@@ -1655,7 +1655,7 @@ cpu_init(struct cpu_context *c)
 	memset(f, 0, sizeof(*f));
 
 	f->PC = CPU_READ16(c, RESET_VECTOR_L);
-	f->P = P_U | P_I;
+	f->P = P_U | P_I | P_B;
 	f->SP = 0;
 
 	return 0;
