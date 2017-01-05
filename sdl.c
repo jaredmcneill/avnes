@@ -68,6 +68,29 @@ static int fullscreen = 0;
 static int overscan = 0;
 static SDL_Rect rect_overscan = { .x = 8, .y = 8, .w = PPU_WIDTH - 16, .h = PPU_HEIGHT - 16 };
 
+static SDL_AudioDeviceID audiodev;
+
+static void
+sdl_init_audio(void)
+{
+	SDL_AudioSpec want, have;
+
+	SDL_memset(&want, 0, sizeof(want));
+	want.freq = 48000;
+	want.format = AUDIO_F32;
+	want.channels = 1;
+	want.samples = 4096;
+	want.callback = NULL;
+
+	audiodev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+	if (audiodev == 0) {
+		SDL_Log("Failed to open audio: %s", SDL_GetError());
+		return;
+	}
+
+	SDL_PauseAudioDevice(audiodev, 0);
+}
+
 int
 sdl_init(const char *filename)
 {
@@ -79,12 +102,14 @@ sdl_init(const char *filename)
 	window_width = PPU_WIDTH * 2 * 8 / 7;
 	window_height = PPU_HEIGHT * 2;
 
-	error = SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER);
+	error = SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_GAMECONTROLLER);
 	if (error != 0) {
 		fprintf(stderr, "Couldn't init SDL: %s\n", SDL_GetError());
 		return ENXIO;
 	}
 	atexit(SDL_Quit);
+
+	sdl_init_audio();
 
 	for (i = 0; i < sizeof(joymap); i++)
 		joymap[i] = 0;
