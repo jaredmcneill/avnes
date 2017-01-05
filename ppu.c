@@ -324,25 +324,25 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 			if (pal) {
 				p->pixels[y][x].priority = PPU_PRIO_BG;
 
-				p->pixels[y][x].c = p->read8(pal_start + (cs * 4) + pal);
+				p->pixels[y][x].c = p->read8(pal_start + (cs * 4) + pal) & 0x3f;
 			} else {
 				/* Default background colour */
 				p->pixels[y][x].priority = PPU_PRIO_NONE;
-				p->pixels[y][x].c = p->read8(pal_start);
+				p->pixels[y][x].c = p->read8(pal_start) & 0x3f;
 			}
 
 			if (x < 8 && (p->regs[REG_PPUMASK] & PPUMASK_m) == 0) {
 				/* Hide background in leftmost 8 pixels */
 				p->pixels[y][x].priority = PPU_PRIO_NONE;
 				p->pixels[y][x].pal = 0;
-				p->pixels[y][x].c = p->read8(pal_start);
+				p->pixels[y][x].c = p->read8(pal_start) & 0x3f;
 			}
 		}
 	} else {
 		if (x <= 0xff) {
 			p->pixels[y][x].priority = PPU_PRIO_NONE;
 			p->pixels[y][x].pal = 0;
-			p->pixels[y][x].c = p->read8(pal_start);
+			p->pixels[y][x].c = p->read8(pal_start) & 0x3f;
 			p->pixels[y][x].has_sprite = 0;
 		}
 	}
@@ -430,7 +430,7 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 
 				p->pixels[y][x].priority = priority;
 				p->pixels[y][x].pal = pal;
-				p->pixels[y][x].c = p->read8(pal_start + (cs * 4) + pal);
+				p->pixels[y][x].c = p->read8(pal_start + (cs * 4) + pal) & 0x3f;
 
 				/* Emulate sprite priority quirk; visible sprites with the lowest OAM index win regardless of front/back priority */
 				break;
