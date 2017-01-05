@@ -70,6 +70,7 @@ static int overscan = 0;
 static SDL_Rect rect_overscan = { .x = 8, .y = 8, .w = PPU_WIDTH - 16, .h = PPU_HEIGHT - 16 };
 
 static SDL_AudioDeviceID audiodev;
+static float audio_pulse_table[32];
 
 static void
 sdl_init_audio(void)
@@ -81,7 +82,7 @@ sdl_init_audio(void)
 	want.freq = 1789773;
 	want.format = AUDIO_F32;
 	want.channels = 1;
-	want.samples = 4096;
+	want.samples = 32768;
 	want.callback = NULL;
 
 	audiodev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
@@ -112,6 +113,9 @@ sdl_init(const char *filename)
 	atexit(SDL_Quit);
 
 	sdl_init_audio();
+
+	for (i = 0; i < 32; i++)
+		audio_pulse_table[i] = 95.52 / (8128.0 / i + 100);
 
 	for (i = 0; i < sizeof(joymap); i++)
 		joymap[i] = 0;
@@ -218,7 +222,7 @@ sdl_play(struct apu_context *a)
 	if (a->status.pulse_enable[1] && a->pulse[1].timer >= 8) {
 		pulse2 = a->pulse[1].seqval ? a->pulse[1].vol_env_div_period : 0;
 	}
-	pulse_out = 0.00752 * (pulse1 + pulse2);
+	pulse_out = audio_pulse_table[pulse1 + pulse2];
 
 	sample = pulse_out;
 
