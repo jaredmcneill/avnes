@@ -85,7 +85,7 @@ sdl_init_audio(void)
 	want.freq = 1789773;
 	want.format = AUDIO_F32;
 	want.channels = 1;
-	want.samples = 32768;
+	want.samples = 4096;
 	want.callback = NULL;
 
 	audiodev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
@@ -229,7 +229,7 @@ sdl_play(struct apu_context *a)
 	}
 	pulse_out = audio_pulse_table[pulse1 + pulse2];
 
-	if (a->status.triangle_enable && a->triangle.timer >= 8)
+	if (a->status.triangle_enable)
 		triangle = a->triangle.seqval;
 	tnd_out = audio_tnd_table[3 * triangle + 2 * noise + dmc];
 

@@ -169,6 +169,9 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 		ap->timer &= ~(0x7 << 8);
 		ap->timer |= ((uint16_t)val & 0x7) << 8;
 		ap->length = (val & 0xf8) >> 3;
+		ap->length_counter = apu_length_counter[ap->length];
+
+		ap->timer_counter = ap->timer;
 
 		break;
 
@@ -196,6 +199,7 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 		at->length = (val & 0xf8) >> 3;
 
 		at->linear_counter_reload = 1;
+		at->timer_counter = at->timer;
 
 		break;
 
@@ -204,6 +208,12 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 		a->status.pulse_enable[1] = (val & 0x02) ? 1 : 0;
 		a->status.triangle_enable = (val & 0x04) ? 1 : 0;
 		a->status.noise_enable = (val & 0x08) ? 1 : 0;
+		if (a->status.pulse_enable[0] == 0)
+			a->pulse[0].length_counter = 0;
+		if (a->status.pulse_enable[1] == 0)
+			a->pulse[1].length_counter = 0;
+		if (a->status.triangle_enable == 0)
+			a->triangle.length_counter = 0;
 		break;
 
 	case REG_FRAME_COUNTER:
@@ -258,7 +268,7 @@ apu_triangle_step(struct apu_context *a, struct apu_triangle *at)
 	/* Increment sequencer step number */
 	at->seqno = (at->seqno + 1) & 0x1f;
 
-	at->timer_counter = at->timer + 1;
+	at->timer_counter = at->timer;
 }
 
 int
