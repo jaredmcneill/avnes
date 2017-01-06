@@ -25,10 +25,17 @@
  */
 
 #include <assert.h>
+#include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <errno.h>
 
 #include <SDL.h>
+
+#if defined(HAVE_LIBDRM)
+#include <xf86drm.h>
+#endif
 
 #include "io.h"
 #include "apu.h"
@@ -79,6 +86,9 @@ static const int audio_buffer_len = 65536;
 static float audio_buffer[audio_buffer_len];
 static int audio_buffer_pos = 0;
 
+#if defined(HAVE_LIBDRM)
+static int drm_fd = -1;
+#endif
 
 static uint32_t frame_counter;
 static uint32_t time_frame0;
@@ -112,6 +122,17 @@ sdl_init(const char *filename)
 	int window_width, window_height;
 	int controller_index, i, error;
 	SDL_RendererInfo renderer_info;
+
+#if defined(HAVE_LIBDRM)
+	const char *vsync = getenv("AVNES_VSYNC");
+	if (vsync != NULL && strcasecmp(vsync, "drm") == 0) {
+		drm_fd = open("/dev/dri/card0", O_RDWR);
+		if (drm_fd == -1)
+			printf("DRM not available, using slow vsync method\n");
+		else
+			printf("Using DRM for vsync\n");
+	}
+#endif
 
 	/* Emulate 8:7 PAR */
 	window_width = PPU_WIDTH * 2 * 8 / 7;
@@ -206,18 +227,53 @@ sdl_init(const char *filename)
 static uint32_t
 sdl_time_left(void)
 {
-	uint32_t now, timer_next;
+	uint32_t now, timer_next, timer_next_next;
 
 	now = SDL_GetTicks();
 
 	timer_next = (frame_counter * 1001) / 60 + time_frame0;
 	if (timer_next <= now) {
-		printf("[frame %d] we are behind! now=%d, timer_next=%d\n", frame_counter, now, timer_next);
+#if 0
+		/* Complain if we are more than one frame off */
+		timer_next_next = ((frame_counter + 1) * 1001) / 60 + time_frame0;
+		if (timer_next_next <= now)
+			printf("[frame %d] frame is late, now=%d, timer_next=%d\n", frame_counter, now, timer_next);
+#endif
 		return 0;
 	}
 
 	//printf("[frame %d] waiting %d ms\n", frame_counter, timer_next - now);
 	return timer_next - now;
+}
+
+static void
+sdl_wait_vsync(void)
+{
+#if defined(HAVE_LIBDRM)
+	drmVBlank vbl;
+	int ret;
+#endif
+	uint32_t delay;
+
+	++frame_counter;
+
+#if defined(HAVE_LIBDRM)
+	if (drm_fd >= 0 && sdl_time_left() > 0) {
+		vbl.request.type = DRM_VBLANK_RELATIVE;
+		vbl.request.sequence = 1;
+		ret = drmWaitVBlank(drm_fd, &vbl);
+		if (ret != 0) {
+			fprintf(stderr, "DRM wait for vblank failed (%d), falling back to slow vsync method\n", ret);
+			close(drm_fd);
+			drm_fd = -1;
+		}
+	}
+	if (drm_fd == -1) {
+#endif
+		SDL_Delay(sdl_time_left());
+#if defined(HAVE_LIBDRM)
+	}
+#endif
 }
 
 void
@@ -242,8 +298,7 @@ sdl_draw(struct ppu_context *p)
 		audio_buffer_pos = 0;
 	}
 
-	++frame_counter;
-	SDL_Delay(sdl_time_left());
+	sdl_wait_vsync();
 
 	SDL_UpdateTexture(texture, NULL, fbmem, PPU_WIDTH * 4);
 

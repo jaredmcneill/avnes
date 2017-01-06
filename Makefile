@@ -12,8 +12,16 @@ CC=	cc
 SDL_CFLAGS!=	pkg-config --cflags sdl2
 SDL_LIBS!=	pkg-config --libs sdl2
 
-CFLAGS=	$(SDL_CFLAGS) -g -O2
-LIBS=	$(SDL_LIBS)
+OPSYS!=		uname -m
+
+ifneq ($(OPSYS),Darwin)
+LIBDRM_CFLAGS!=	pkg-config --cflags libdrm
+LIBDRM_CFLAGS+=	-DHAVE_LIBDRM
+LIBDRM_LIBS!=	pkg-config --libs libdrm
+endif
+
+CFLAGS=	$(SDL_CFLAGS) $(LIBDRM_CFLAGS) -g -O2
+LIBS=	$(SDL_LIBS) $(LIBDRM_LIBS)
 
 all: $(PROG)
 
