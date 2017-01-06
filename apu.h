@@ -86,6 +86,24 @@ struct apu_triangle {
 	uint8_t			seqval;
 };
 
+struct apu_noise {
+	uint8_t			length_counter_halt : 1;
+	uint8_t			constant_vol_env_flag : 1;
+	uint8_t			vol_env_div_period : 1;
+
+	uint8_t			mode : 1;
+	uint8_t			noise_period : 4;
+
+	uint16_t		timer : 11;
+	uint16_t		timer_counter : 11;
+
+	uint8_t			length : 5;
+	uint8_t			length_counter : 5;
+
+	/* Sequencer state */
+	uint8_t			seqval;
+};
+
 struct apu_context {
 	struct cpu_context	*c;
 
@@ -94,6 +112,9 @@ struct apu_context {
 
 	struct apu_pulse	pulse[2];
 	struct apu_triangle	triangle;
+	struct apu_noise	noise;
+
+	uint16_t		noise_shift_reg;
 
 	int			cycle;
 

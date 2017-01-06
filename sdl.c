@@ -222,15 +222,19 @@ sdl_play(struct apu_context *a)
 	pulse1 = pulse2 = triangle = noise = dmc = 0;
 
 	if (a->status.pulse_enable[0] && a->pulse[0].timer >= 8) {
-		pulse1 = a->pulse[0].seqval ? a->pulse[0].vol_env_div_period : 0;
+		pulse1 = a->pulse[0].seqval;
 	}
 	if (a->status.pulse_enable[1] && a->pulse[1].timer >= 8) {
-		pulse2 = a->pulse[1].seqval ? a->pulse[1].vol_env_div_period : 0;
+		pulse2 = a->pulse[1].seqval;
 	}
 	pulse_out = audio_pulse_table[pulse1 + pulse2];
 
-	if (a->status.triangle_enable)
+	if (a->status.triangle_enable && a->triangle.linear_counter > 0) {
 		triangle = a->triangle.seqval;
+	}
+	if (a->status.noise_enable) {
+		noise = a->noise.seqval;
+	}
 	tnd_out = audio_tnd_table[3 * triangle + 2 * noise + dmc];
 
 	sample = pulse_out + tnd_out;

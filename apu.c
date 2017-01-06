@@ -50,6 +50,11 @@
 #define	REG_TRIANGLE_LLLLLLLL	0x400a
 #define	REG_TRIANGLE_LLLLLHHH	0x400b
 
+/* Noise channel (write) */
+#define	REG_NOISE___LCVVVV	0x400c
+#define	REG_NOISE_M___PPPP	0x400e
+#define	REG_NOISE_LLLLL___	0x400f
+
 /* Status */
 #define	REG_STATUS		0x4015
 
@@ -72,6 +77,12 @@ apu_triangle_sequence[32] = {
 	 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
 };
 
+/* APU noise timer periods */
+static uint16_t
+apu_noise_timer_period[16] = {
+	4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068
+};
+
 /* APU length counter table */
 static uint8_t
 apu_length_counter[32] = {
@@ -82,6 +93,7 @@ apu_length_counter[32] = {
 int
 apu_init(struct apu_context *a)
 {
+	a->noise_shift_reg = 1;
 
 	return 0;
 }
@@ -105,9 +117,11 @@ apu_read(struct apu_context *a, uint16_t addr)
 			val |= 0x02;
 		if (a->status.triangle_enable && a->triangle.length_counter > 0)
 			val |= 0x04;
-#ifdef APU_DEBUG
+		if (a->status.noise_enable && a->noise.length_counter > 0)
+			val |= 0x08;
+//#ifdef APU_DEBUG
 		printf("[%s] status = $%02X\n", __func__, val);
-#endif
+//#endif
 		break;
 	default:
 #ifdef APU_DEBUG
@@ -125,6 +139,11 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 {
 	struct apu_pulse *ap;
 	struct apu_triangle *at;
+	struct apu_noise *an;
+
+#ifdef APU_DEBUG
+	printf("[%s] addr=$%04X val=$%02X\n", __func__, addr, val);
+#endif
 
 	switch (addr) {
 	case REG_PULSE1_DDLCNNNN:
@@ -135,10 +154,6 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 		ap->length_counter_halt = (val & 0x20) ? 1 : 0;
 		ap->constant_vol_env_flag = (val & 0x10) ? 1 : 0;
 		ap->vol_env_div_period = val & 0xf;
-
-		if (ap->length_counter_halt) {
-			ap->length_counter = apu_length_counter[ap->length];
-		}
 
 		break;
 
@@ -169,7 +184,6 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 		ap->timer &= ~(0x7 << 8);
 		ap->timer |= ((uint16_t)val & 0x7) << 8;
 		ap->length = (val & 0xf8) >> 3;
-		ap->length_counter = apu_length_counter[ap->length];
 
 		ap->timer_counter = ap->timer;
 
@@ -180,6 +194,7 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 
 		at->length_counter_halt = (val & 0x80) ? 1 : 0;
 		at->counter_reload = (val & 0x7f);
+		at->linear_counter_reload = 1;
 
 		break;
 
@@ -199,7 +214,34 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 		at->length = (val & 0xf8) >> 3;
 
 		at->linear_counter_reload = 1;
-		at->timer_counter = at->timer;
+		at->timer_counter = at->timer + 1;
+
+		break;
+
+	case REG_NOISE___LCVVVV:
+		an = &a->noise;
+
+		an->length_counter_halt = (val & 0x20) ? 1 : 0;
+		an->constant_vol_env_flag = (val & 0x10) ? 1 : 0;
+		an->vol_env_div_period = val & 0xf;
+
+		break;
+
+	case REG_NOISE_M___PPPP:
+		an = &a->noise;
+
+		an->mode = (val & 0x80) ? 1 : 0;
+		an->noise_period = val & 0xf;
+
+		an->timer = apu_noise_timer_period[an->noise_period];
+		an->timer_counter = an->timer;
+
+		break;
+
+	case REG_NOISE_LLLLL___:
+		an = &a->noise;
+
+		an->length = (val & 0xf8) >> 3;
 
 		break;
 
@@ -210,10 +252,20 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 		a->status.noise_enable = (val & 0x08) ? 1 : 0;
 		if (a->status.pulse_enable[0] == 0)
 			a->pulse[0].length_counter = 0;
+		else
+			a->pulse[0].length_counter = apu_length_counter[a->pulse[0].length];
 		if (a->status.pulse_enable[1] == 0)
 			a->pulse[1].length_counter = 0;
+		else
+			a->pulse[1].length_counter = apu_length_counter[a->pulse[1].length];
 		if (a->status.triangle_enable == 0)
 			a->triangle.length_counter = 0;
+		else
+			a->triangle.length_counter = apu_length_counter[a->triangle.length];
+		if (a->status.noise_enable == 0)
+			a->noise.length_counter = 0;
+		else
+			a->noise.length_counter = apu_length_counter[a->noise.length];
 		break;
 
 	case REG_FRAME_COUNTER:
@@ -232,9 +284,6 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 #endif
 		break;
 	default:
-#ifdef APU_DEBUG
-		printf("TODO: %s addr=$%04X val=$%02X\n", __func__, addr, val);
-#endif
 		break;
 	}
 }
@@ -247,7 +296,8 @@ apu_pulse_step(struct apu_context *a, struct apu_pulse *ap)
 		return;
 	}
 
-	ap->seqval = apu_pulse_sequence[ap->duty_cycle][ap->seqno];
+	ap->seqval = apu_pulse_sequence[ap->duty_cycle][ap->seqno] ?
+	    ap->vol_env_div_period : 0;
 
 	/* Increment sequencer step number */
 	ap->seqno = (ap->seqno + 1) & 0x7;
@@ -268,7 +318,29 @@ apu_triangle_step(struct apu_context *a, struct apu_triangle *at)
 	/* Increment sequencer step number */
 	at->seqno = (at->seqno + 1) & 0x1f;
 
-	at->timer_counter = at->timer;
+	at->timer_counter = at->timer + 1;
+}
+
+static void
+apu_noise_step(struct apu_context *a, struct apu_noise *an)
+{
+	uint16_t feedback;
+
+	if (an->timer_counter > 0) {
+		--an->timer_counter;
+		return;
+	}
+
+	/* Update shift register */
+	an->seqval = (a->noise_shift_reg & 0x4000) ? an->vol_env_div_period : 0;
+	if (an->mode == 0) {
+		feedback = (a->noise_shift_reg << 13) ^ (a->noise_shift_reg << 14);
+	} else {
+		feedback = (a->noise_shift_reg << 8) ^ (a->noise_shift_reg << 14);
+	}
+	a->noise_shift_reg = (feedback & 0x4000) | (a->noise_shift_reg >> 1);
+
+	an->timer_counter = an->timer;
 }
 
 int
@@ -278,12 +350,14 @@ apu_step(struct apu_context *a)
 	const int half_cycle = a->cycle & 1;
 	int irq = 0, length_counter = 0, linear_counter = 0;
 
-	/* Pulse channel timers run at APU (CPU/2) rate */
+	/* Pulse and noise channel timers run at APU (CPU/2) rate */
 	if (!half_cycle) {
 		if (a->status.pulse_enable[0])
 			apu_pulse_step(a, &a->pulse[0]);
 		if (a->status.pulse_enable[1])
 			apu_pulse_step(a, &a->pulse[1]);
+		if (a->status.noise_enable)
+			apu_noise_step(a, &a->noise);
 	}
 	/* Triangle channel timer runs at CPU rate */
 	if (a->status.triangle_enable)
@@ -345,6 +419,14 @@ apu_step(struct apu_context *a)
 				a->status.triangle_enable = 0;
 				a->triangle.length_counter = a->triangle.linear_counter = 0;
 				a->triangle.seqval = 0;
+			}
+		}
+		if (a->status.noise_enable && !a->noise.length_counter_halt) {
+			a->noise.length_counter--;
+			if (a->noise.length_counter == 0) {
+				a->status.noise_enable = 0;
+				a->noise.length_counter = 0;
+				a->noise.seqval = 0;
 			}
 		}
 	}
