@@ -75,6 +75,14 @@ static const unsigned int audio_pulse_table_len = 31;
 static float audio_tnd_table[203];
 static const unsigned int audio_tnd_table_len = 203;
 
+static const int audio_buffer_len = 65536;
+static float audio_buffer[audio_buffer_len];
+static int audio_buffer_pos = 0;
+
+
+static uint32_t frame_counter;
+static uint32_t time_frame0;
+
 static void
 sdl_init_audio(void)
 {
@@ -103,6 +111,7 @@ sdl_init(const char *filename)
 	char *window_title;
 	int window_width, window_height;
 	int controller_index, i, error;
+	SDL_RendererInfo renderer_info;
 
 	/* Emulate 8:7 PAR */
 	window_width = PPU_WIDTH * 2 * 8 / 7;
@@ -167,23 +176,48 @@ sdl_init(const char *filename)
 		return ENXIO;
 	}
 
-	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 	if (!renderer) {
 		fprintf(stderr, "Couldn't create SDL renderer: %s\n", SDL_GetError());
 		return ENXIO;
+	}
+	if (SDL_GetRendererInfo(renderer, &renderer_info) != 0) {
+		fprintf(stderr, "Couldn't get SDL renderer info: %s\n", SDL_GetError());
+	} else {
+		printf("Renderer: %s (0x%x)\n", renderer_info.name, renderer_info.flags);
 	}
 	if (SDL_RenderSetLogicalSize(renderer, window_width, window_height) != 0) {
 		fprintf(stderr, "Couldn't set SDL renderer logical resolution: %s\n", SDL_GetError());
 		return ENXIO;
 	}
 
-	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, PPU_WIDTH, PPU_HEIGHT);
+	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, PPU_WIDTH, PPU_HEIGHT);
 	if (!texture) {
 		fprintf(stderr, "Couldn't create SDL texture: %s\n", SDL_GetError());
 		return ENXIO;
 	}
 
+	frame_counter = 0;
+	time_frame0 = SDL_GetTicks();
+
 	return 0;
+}
+
+static uint32_t
+sdl_time_left(void)
+{
+	uint32_t now, timer_next;
+
+	now = SDL_GetTicks();
+
+	timer_next = (frame_counter * 1001) / 60 + time_frame0;
+	if (timer_next <= now) {
+		printf("[frame %d] we are behind! now=%d, timer_next=%d\n", frame_counter, now, timer_next);
+		return 0;
+	}
+
+	//printf("[frame %d] waiting %d ms\n", frame_counter, timer_next - now);
+	return timer_next - now;
 }
 
 void
@@ -202,6 +236,14 @@ sdl_draw(struct ppu_context *p)
 			*fb++ = 0xff;
 		}
 	}
+
+	if (audio_buffer_pos > 0) {
+		SDL_QueueAudio(audiodev, audio_buffer, audio_buffer_pos * sizeof(audio_buffer[0]));
+		audio_buffer_pos = 0;
+	}
+
+	++frame_counter;
+	SDL_Delay(sdl_time_left());
 
 	SDL_UpdateTexture(texture, NULL, fbmem, PPU_WIDTH * 4);
 
@@ -239,7 +281,9 @@ sdl_play(struct apu_context *a)
 
 	sample = pulse_out + tnd_out;
 
-	SDL_QueueAudio(audiodev, &sample, sizeof(sample));
+	if (audio_buffer_pos < audio_buffer_len) {
+		audio_buffer[audio_buffer_pos++] = sample;
+	}
 }
 
 static uint8_t

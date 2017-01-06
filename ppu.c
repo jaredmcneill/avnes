@@ -63,11 +63,6 @@
 #define	PPU_TILE_ADDR(v)	(0x2000 | ((v) & 0x0fff))
 #define	PPU_ATTR_ADDR(v)	(0x23c0 | ((v) & 0x0c00) | (((v) >> 4) & 0x38) | (((v) >> 2) & 0x07))
 
-static const struct timespec PPU_VBLANK_INTERVAL = {
-	.tv_sec = 0,
-	.tv_nsec = 1000000000 / 60000 * 1001
-};
-
 static uint16_t
 ppu_incr_x(struct ppu_context *p)
 {
@@ -118,9 +113,6 @@ ppu_init(struct ppu_context *p)
 {
 	p->frame = 0;
 	p->frame_ticks = PPU_TICKS_PER_FRAME;
-
-	clock_gettime(CLOCK_MONOTONIC, &p->next_vblank);
-	timespecadd(&p->next_vblank, &PPU_VBLANK_INTERVAL);
 
 	return 0;
 }
@@ -484,13 +476,6 @@ ppu_step(struct ppu_context *p)
 	int ret = 0;
 
 	if (p->frame_ticks == 0) {
-		clock_gettime(CLOCK_MONOTONIC, &ts);
-		if (timespeccmp(&ts, &p->next_vblank, <)) {
-			timespecsub(&ts, &p->next_vblank);
-			nanosleep(&ts, NULL);
-			timespecadd(&p->next_vblank, &PPU_VBLANK_INTERVAL);
-		}
-
 		if (p->draw)
 			p->draw(p);
 
