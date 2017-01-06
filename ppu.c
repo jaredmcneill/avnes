@@ -278,6 +278,28 @@ ppu_get_cs_for_bgpixel(uint8_t attr, unsigned int x, unsigned int y)
 }
 
 static void
+ppu_get_sprites(struct ppu_context *p, unsigned int y)
+{
+	/* Rendering control flags */
+	const int show_sprites = (p->regs[REG_PPUMASK] & PPUMASK_s) != 0;
+
+	/* Sprite height (8 or 16 pixels) */
+	const uint16_t sprite_height = (p->regs[REG_PPUCTRL] & PPUCTRL_H) ? 16 : 8;
+
+	p->scanline_num_sprites = 0;
+
+	for (int n = 0; n < 64 && p->scanline_num_sprites < 8; n++) {
+		const uint8_t sprite_y = p->oam[n * 4 + 0] + 1;
+
+		if (sprite_y == 0 || sprite_y >= 0xf0)
+			continue;
+
+		if (y >= sprite_y && y < sprite_y + sprite_height)
+			p->scanline_sprites[p->scanline_num_sprites++] = n;
+	}
+}
+
+static void
 ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 {
 
@@ -346,87 +368,89 @@ ppu_put_pixel(struct ppu_context *p, unsigned int x, unsigned int y)
 		/* Sprite height (8 or 16 pixels) */
 		const uint16_t sprite_height = (p->regs[REG_PPUCTRL] & PPUCTRL_H) ? 16 : 8;
 
-		for (int n = 0; n < 64; n++) {
+		for (int i = 0; i < p->scanline_num_sprites; i++) {
+			const int n = p->scanline_sprites[i];
 			const uint8_t sprite_y = p->oam[n * 4 + 0] + 1;
 			const uint8_t sprite_x = p->oam[n * 4 + 3];
 
 			if (sprite_y == 0 || sprite_y >= 0xf0)
 				continue;
 
-			if (x >= sprite_x && x < sprite_x + 8 && y >= sprite_y && y < sprite_y + sprite_height) {
-				const unsigned int xrel = x - sprite_x;
-				const unsigned int yrel = y - sprite_y;
-				const uint8_t sprite_tile = p->oam[n * 4 + 1];
-				const uint8_t sprite_attr = p->oam[n * 4 + 2];
+			if (x < sprite_x || x >= sprite_x + 8)
+				continue;
 
-				/* Horizontal flip flag */
-				const int flip_h = (sprite_attr & 0x40) != 0;
-				/* Vertical flip flag */
-				const int flip_v = (sprite_attr & 0x80) != 0;
-				/* Priority */
-				const int priority = (sprite_attr & 0x20) != 0 ? PPU_PRIO_BEHIND : PPU_PRIO_FRONT;
+			const unsigned int xrel = x - sprite_x;
+			const unsigned int yrel = y - sprite_y;
+			const uint8_t sprite_tile = p->oam[n * 4 + 1];
+			const uint8_t sprite_attr = p->oam[n * 4 + 2];
 
-				/* Sprite pattern table address */
-				const uint16_t pat_start = sprite_height == 8 ?
-				    ((p->regs[REG_PPUCTRL] & PPUCTRL_S) ? 0x1000 : 0x0000) :
-				    (sprite_tile & 1) << 12;
+			/* Horizontal flip flag */
+			const int flip_h = (sprite_attr & 0x40) != 0;
+			/* Vertical flip flag */
+			const int flip_v = (sprite_attr & 0x80) != 0;
+			/* Priority */
+			const int priority = (sprite_attr & 0x20) != 0 ? PPU_PRIO_BEHIND : PPU_PRIO_FRONT;
 
-				/* Sprite tile start */
-				const uint16_t sprite_tile_start = sprite_height == 8 ?
-				    sprite_tile : (sprite_tile & 0xfe);
+			/* Sprite pattern table address */
+			const uint16_t pat_start = sprite_height == 8 ?
+			    ((p->regs[REG_PPUCTRL] & PPUCTRL_S) ? 0x1000 : 0x0000) :
+			    (sprite_tile & 1) << 12;
 
-				/* Offset of pattern table entry (low) */
-				uint16_t pat_off = sprite_tile_start * 16 +
-				    (flip_v ? ((sprite_height - 1) - (yrel & (sprite_height - 1))) : (yrel & (sprite_height - 1)));
+			/* Sprite tile start */
+			const uint16_t sprite_tile_start = sprite_height == 8 ?
+			    sprite_tile : (sprite_tile & 0xfe);
+
+			/* Offset of pattern table entry (low) */
+			uint16_t pat_off = sprite_tile_start * 16 +
+			    (flip_v ? ((sprite_height - 1) - (yrel & (sprite_height - 1))) : (yrel & (sprite_height - 1)));
+			if (yrel >= 8)
+				pat_off += 8;
+			if (sprite_height == 16 && flip_v) {
 				if (yrel >= 8)
+					pat_off -= 8;
+				else
 					pat_off += 8;
-				if (sprite_height == 16 && flip_v) {
-					if (yrel >= 8)
-						pat_off -= 8;
-					else
-						pat_off += 8;
-				}
-
-				/* Pattern table entry */
-				const uint8_t pat_l = p->read8(pat_start + pat_off);
-				const uint8_t pat_h = p->read8(pat_start + pat_off + 8);
-				/* Bit in pattern table */
-				const int bit = flip_h ? (xrel & 7) : 7 - (xrel & 7);
-				/* Palette entry */
-				const uint8_t pal = ((pat_l & (1 << bit)) ? 1 : 0) |
-						    ((pat_h & (1 << bit)) ? 2 : 0);
-
-				/*
-				 * When a nonzero pixel of sprite 0 overlaps a nonzero background pixel,
-				 * set the Sprite 0 Hit flag in PPUSTATUS
-				 */
-				if (n == 0 && p->pixels[y][x].pal != 0 && pal != 0) {
-					if (p->sprite0_hit == 0) {
-						p->regs[REG_PPUSTATUS] |= PPUSTATUS_S;
-						p->sprite0_hit = 1;
-					}
-				}
-
-				/* Non-transparent back-priority sprites with a lower sprite index have a higher priority */
-				if (p->pixels[y][x].has_sprite)
-					continue;
-				if (pal)
-					p->pixels[y][x].has_sprite = 1;
-
-				/* Skip pixels in front of this one. If sprites overlap, the lower numbered sprite wins. */
-				if (priority <= p->pixels[y][x].priority || pal == 0)
-					continue;
-
-				/* Colour set */
-				const uint8_t cs = (sprite_attr & 0x3) + 4;
-
-				p->pixels[y][x].priority = priority;
-				p->pixels[y][x].pal = pal;
-				p->pixels[y][x].c = p->read8(pal_start + (cs * 4) + pal) & 0x3f;
-
-				/* Emulate sprite priority quirk; visible sprites with the lowest OAM index win regardless of front/back priority */
-				break;
 			}
+
+			/* Pattern table entry */
+			const uint8_t pat_l = p->read8(pat_start + pat_off);
+			const uint8_t pat_h = p->read8(pat_start + pat_off + 8);
+			/* Bit in pattern table */
+			const int bit = flip_h ? (xrel & 7) : 7 - (xrel & 7);
+			/* Palette entry */
+			const uint8_t pal = ((pat_l & (1 << bit)) ? 1 : 0) |
+					    ((pat_h & (1 << bit)) ? 2 : 0);
+
+			/*
+			 * When a nonzero pixel of sprite 0 overlaps a nonzero background pixel,
+			 * set the Sprite 0 Hit flag in PPUSTATUS
+			 */
+			if (n == 0 && p->pixels[y][x].pal != 0 && pal != 0) {
+				if (p->sprite0_hit == 0) {
+					p->regs[REG_PPUSTATUS] |= PPUSTATUS_S;
+					p->sprite0_hit = 1;
+				}
+			}
+
+			/* Non-transparent back-priority sprites with a lower sprite index have a higher priority */
+			if (p->pixels[y][x].has_sprite)
+				continue;
+			if (pal)
+				p->pixels[y][x].has_sprite = 1;
+
+			/* Skip pixels in front of this one. If sprites overlap, the lower numbered sprite wins. */
+			if (priority <= p->pixels[y][x].priority || pal == 0)
+				continue;
+
+			/* Colour set */
+			const uint8_t cs = (sprite_attr & 0x3) + 4;
+
+			p->pixels[y][x].priority = priority;
+			p->pixels[y][x].pal = pal;
+			p->pixels[y][x].c = p->read8(pal_start + (cs * 4) + pal) & 0x3f;
+
+			/* Emulate sprite priority quirk; visible sprites with the lowest OAM index win regardless of front/back priority */
+			break;
 		}
 	}
 }
@@ -476,8 +500,13 @@ ppu_step(struct ppu_context *p)
 	int ret = 0;
 
 	if (p->frame_ticks == 0) {
+#if 0
 		if (p->draw)
 			p->draw(p);
+#else
+		extern void sdl_draw(struct ppu_context *);
+		sdl_draw(p);
+#endif
 
 		p->frame_ticks = PPU_TICKS_PER_FRAME;
 		if ((p->frame & 1) != 0 || (p->regs[REG_PPUMASK] & PPUMASK_b) != 0) {
@@ -516,6 +545,7 @@ ppu_step(struct ppu_context *p)
 			/* Visible scanlines */
 			if (scanline_cycle == 0) {
 				/* Idle cycle */
+				ppu_get_sprites(p, scanline);
 			} else if (scanline_cycle >= 1 && scanline_cycle <= 256) {
 				/* Fetch cycle */
 				ppu_put_pixel(p, scanline_cycle - 1, scanline);

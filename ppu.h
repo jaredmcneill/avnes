@@ -109,6 +109,9 @@ struct ppu_context {
 
 	int sprite0_hit;
 
+	unsigned int scanline_sprites[8];
+	unsigned int scanline_num_sprites;
+
 	void (*draw)(struct ppu_context *);
 	uint8_t (*read8)(uint16_t);
 	void (*write8)(uint16_t, uint8_t);
