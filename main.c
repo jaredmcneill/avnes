@@ -110,6 +110,9 @@ static void
 nes_cpuwrite8(uint16_t addr, uint8_t val)
 {
 
+	if (addr == 0xe000)
+		printf("Write $%02X to $E000\n", val);
+
 	/* 2KB internal RAM */
 	if (addr >= NES_RAM_MINADDR_A && addr <= NES_RAM_MAXADDR_D) {
 		avnes.ram[addr & NES_RAM_MAXADDR_A] = val;

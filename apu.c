@@ -26,6 +26,7 @@
 
 //#define APU_DEBUG
 
+#include <assert.h>
 #include <stdio.h>
 
 #include "avnes.h"
@@ -55,6 +56,12 @@
 #define	REG_NOISE_M___PPPP	0x400e
 #define	REG_NOISE_LLLLL___	0x400f
 
+/* DMC channel (write) */
+#define	REG_DMC_IL__RRRR	0x4010
+#define	REG_DMC__DDDDDDD	0x4011
+#define	REG_DMC_AAAAAAAA	0x4012
+#define	REG_DMC_LLLLLLLL	0x4013
+
 /* Status */
 #define	REG_STATUS		0x4015
 
@@ -83,6 +90,12 @@ apu_noise_timer_period[16] = {
 	4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068
 };
 
+/* APU DMC rate table (NTSC) */
+static uint16_t
+apu_dmc_rate_table_ntsc[16] = {
+	428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106,  84,  72,  54
+};
+
 /* APU length counter table */
 static uint8_t
 apu_length_counter[32] = {
@@ -94,6 +107,7 @@ int
 apu_init(struct apu_context *a)
 {
 	a->noise_shift_reg = 1;
+	a->dmc.silence = 1;
 
 	return 0;
 }
@@ -119,9 +133,13 @@ apu_read(struct apu_context *a, uint16_t addr)
 			val |= 0x04;
 		if (a->status.noise_enable && a->noise.length_counter > 0)
 			val |= 0x08;
-//#ifdef APU_DEBUG
+		if (a->status.dmc_active)
+			val |= 0x10;
+		if (a->status.dmc_interrupt)
+			val |= 0x80;
+#ifdef APU_DEBUG
 		printf("[%s] status = $%02X\n", __func__, val);
-//#endif
+#endif
 		break;
 	default:
 #ifdef APU_DEBUG
@@ -140,6 +158,8 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 	struct apu_pulse *ap;
 	struct apu_triangle *at;
 	struct apu_noise *an;
+	struct apu_dmc *ad;
+	int old_dmc_active;
 
 #ifdef APU_DEBUG
 	printf("[%s] addr=$%04X val=$%02X\n", __func__, addr, val);
@@ -245,11 +265,60 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 
 		break;
 
+	case REG_DMC_IL__RRRR:
+		ad = &a->dmc;
+
+		ad->irq_enable = (val & 0x80) ? 1 : 0;
+		ad->loop_flag = (val & 0x40) ? 1 : 0;
+		ad->rate_index = val & 0xf;
+
+		ad->timer = apu_dmc_rate_table_ntsc[ad->rate_index];
+
+		break;
+
+	case REG_DMC__DDDDDDD:
+		ad = &a->dmc;
+
+		ad->seqval = val & 0x7f;
+		ad->silence = 0;
+
+		break;
+
+	case REG_DMC_AAAAAAAA:
+		ad = &a->dmc;
+
+		ad->sample_address = 0xc000 | ((uint16_t)val << 6);
+
+		break;
+
+	case REG_DMC_LLLLLLLL:
+		ad = &a->dmc;
+
+		ad->sample_length = ((uint16_t)val << 4) + 1;
+
+		break;
+
 	case REG_STATUS:
+		old_dmc_active = a->status.dmc_active;
+
+		a->status.dmc_interrupt = 0;
+
 		a->status.pulse_enable[0] = (val & 0x01) ? 1 : 0;
 		a->status.pulse_enable[1] = (val & 0x02) ? 1 : 0;
 		a->status.triangle_enable = (val & 0x04) ? 1 : 0;
 		a->status.noise_enable = (val & 0x08) ? 1 : 0;
+		a->status.dmc_active = (val & 0x10) ? 1 : 0;
+
+		if (a->status.dmc_active && !old_dmc_active) {
+			a->dmc.cur_sample_address = a->dmc.sample_address;
+			a->dmc.cur_sample_length = a->dmc.sample_length;
+			a->dmc.cur_sample_bits = 0;
+			a->dmc.timer_counter = a->dmc.timer;
+			a->dmc.silence = 0;
+		} else if (old_dmc_active && !a->status.dmc_active) {
+			a->dmc.silence = 1;
+		}
+
 		if (a->status.pulse_enable[0] == 0)
 			a->pulse[0].length_counter = 0;
 		else
@@ -266,6 +335,7 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 			a->noise.length_counter = 0;
 		else
 			a->noise.length_counter = apu_length_counter[a->noise.length];
+		
 		break;
 
 	case REG_FRAME_COUNTER:
@@ -343,6 +413,52 @@ apu_noise_step(struct apu_context *a, struct apu_noise *an)
 	an->timer_counter = an->timer;
 }
 
+static void
+apu_dmc_step(struct apu_context *a, struct apu_dmc *ad)
+{
+	int delta;
+
+	if (ad->timer_counter > 0) {
+		--ad->timer_counter;
+		return;
+	}
+
+
+	if (ad->cur_sample_length == 0 && ad->cur_sample_bits == 0) {
+		if (ad->loop_flag) {
+			ad->cur_sample_length = ad->sample_length;
+			ad->cur_sample_address = ad->sample_address;
+			ad->cur_sample_bits = 0;
+			ad->timer_counter = ad->timer;
+			ad->silence = 0;
+		} else {
+			a->status.dmc_active = 0;
+			ad->silence = 1;
+			if (ad->irq_enable) {
+				a->status.dmc_interrupt = 1;
+				cpu_irq(a->c);
+			}
+			return;
+		}
+	}
+
+	if (ad->cur_sample_bits == 0 && ad->cur_sample_length > 0) {
+		ad->cur_sample = a->read8(ad->cur_sample_address);
+		ad->cur_sample_address++;
+		if (ad->cur_sample_address == 0)
+			ad->cur_sample_address = 0x8000;
+		ad->cur_sample_bits = 8;
+		--ad->cur_sample_length;
+	}
+
+	delta = (ad->cur_sample & 1) ? 2 : -2;
+	ad->cur_sample >>= 1;
+	--ad->cur_sample_bits;
+
+	if ((unsigned int)(ad->seqval + delta) <= 0x7f)
+		ad->seqval += delta;
+}
+
 int
 apu_step(struct apu_context *a)
 {
@@ -362,6 +478,10 @@ apu_step(struct apu_context *a)
 	/* Triangle channel timer runs at CPU rate */
 	if (a->status.triangle_enable)
 		apu_triangle_step(a, &a->triangle);
+
+	/* DMC rate table is based on CPU clock rate */
+	if (a->status.dmc_active)
+		apu_dmc_step(a, &a->dmc);
 
 	switch (a->cycle) {
 	case APU_CYCLE(3728,5):

@@ -104,6 +104,26 @@ struct apu_noise {
 	uint8_t			seqval;
 };
 
+struct apu_dmc {
+	uint8_t			irq_enable : 1;
+	uint8_t			loop_flag : 1;
+	uint8_t			rate_index : 4;
+
+	uint16_t		sample_address : 16;
+	uint16_t		sample_length : 12;
+
+	uint16_t		timer : 11;
+	uint16_t		timer_counter : 11;
+
+	/* Sequencer state */
+	uint8_t			cur_sample;
+	uint8_t			cur_sample_bits;
+	uint16_t		cur_sample_address;
+	uint16_t		cur_sample_length;
+	uint8_t			seqval;
+	int			silence;
+};
+
 struct apu_context {
 	struct cpu_context	*c;
 
@@ -113,6 +133,7 @@ struct apu_context {
 	struct apu_pulse	pulse[2];
 	struct apu_triangle	triangle;
 	struct apu_noise	noise;
+	struct apu_dmc		dmc;
 
 	uint16_t		noise_shift_reg;
 

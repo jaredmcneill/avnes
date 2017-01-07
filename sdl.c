@@ -332,6 +332,9 @@ sdl_play(struct apu_context *a)
 	if (a->status.noise_enable) {
 		noise = a->noise.seqval;
 	}
+	if (!a->dmc.silence) {
+		dmc = a->dmc.seqval;
+	}
 	tnd_out = audio_tnd_table[3 * triangle + 2 * noise + dmc];
 
 	sample = pulse_out + tnd_out;
