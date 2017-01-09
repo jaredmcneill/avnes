@@ -500,13 +500,8 @@ ppu_step(struct ppu_context *p)
 	int ret = 0;
 
 	if (p->frame_ticks == 0) {
-#if 0
 		if (p->draw)
 			p->draw(p);
-#else
-		extern void sdl_draw(struct ppu_context *);
-		sdl_draw(p);
-#endif
 
 		p->frame_ticks = PPU_TICKS_PER_FRAME;
 		if ((p->frame & 1) != 0 || (p->regs[REG_PPUMASK] & PPUMASK_b) != 0) {
