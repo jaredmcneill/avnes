@@ -62,6 +62,8 @@ struct apu_pulse {
 	uint8_t			length : 5;
 	uint8_t			length_counter : 5;
 
+	uint8_t			cur_volume : 4;
+
 	/* Sequencer state */
 	uint8_t			seqno;
 	uint8_t			seqval;
@@ -99,6 +101,8 @@ struct apu_noise {
 
 	uint8_t			length : 5;
 	uint8_t			length_counter : 5;
+
+	uint8_t			cur_volume : 4;
 
 	/* Sequencer state */
 	uint8_t			seqval;

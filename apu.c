@@ -174,6 +174,7 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 		ap->length_counter_halt = (val & 0x20) ? 1 : 0;
 		ap->constant_vol_env_flag = (val & 0x10) ? 1 : 0;
 		ap->vol_env_div_period = val & 0xf;
+		ap->cur_volume = ap->vol_env_div_period;
 
 		break;
 
@@ -244,6 +245,8 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 		an->length_counter_halt = (val & 0x20) ? 1 : 0;
 		an->constant_vol_env_flag = (val & 0x10) ? 1 : 0;
 		an->vol_env_div_period = val & 0xf;
+
+		an->cur_volume = an->vol_env_div_period;
 
 		break;
 
@@ -367,7 +370,7 @@ apu_pulse_step(struct apu_context *a, struct apu_pulse *ap)
 	}
 
 	ap->seqval = apu_pulse_sequence[ap->duty_cycle][ap->seqno] ?
-	    ap->vol_env_div_period : 0;
+	    ap->cur_volume : 0;
 
 	/* Increment sequencer step number */
 	ap->seqno = (ap->seqno + 1) & 0x7;
@@ -402,7 +405,7 @@ apu_noise_step(struct apu_context *a, struct apu_noise *an)
 	}
 
 	/* Update shift register */
-	an->seqval = (a->noise_shift_reg & 0x4000) ? an->vol_env_div_period : 0;
+	an->seqval = (a->noise_shift_reg & 0x4000) ? an->cur_volume : 0;
 	if (an->mode == 0) {
 		feedback = (a->noise_shift_reg << 13) ^ (a->noise_shift_reg << 14);
 	} else {
@@ -563,6 +566,27 @@ apu_step(struct apu_context *a)
 			if (a->triangle.linear_counter == 0) {
 				a->status.triangle_enable = 0;
 				a->triangle.seqval = 0;
+			}
+		}
+		if (a->status.pulse_enable[0] && a->pulse[0].constant_vol_env_flag == 0) {
+			if (a->pulse[0].cur_volume > 0) {
+				a->pulse[0].cur_volume--;
+			} else if (a->pulse[0].length_counter_halt == 1) {
+				a->pulse[0].cur_volume = a->pulse[0].vol_env_div_period;
+			}
+		}
+		if (a->status.pulse_enable[1] && a->pulse[1].constant_vol_env_flag == 0) {
+			if (a->pulse[1].cur_volume > 0) {
+				a->pulse[1].cur_volume--;
+			} else if (a->pulse[1].length_counter_halt == 1) {
+				a->pulse[1].cur_volume = a->pulse[1].vol_env_div_period;
+			}
+		}
+		if (a->status.noise_enable && a->noise.constant_vol_env_flag == 0) {
+			if (a->noise.cur_volume > 0) {
+				a->noise.cur_volume--;
+			} else if (a->noise.length_counter_halt == 1) {
+				a->noise.cur_volume = a->noise.vol_env_div_period;
 			}
 		}
 	}
