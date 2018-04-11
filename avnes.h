@@ -39,7 +39,7 @@
 #define nitems(x)	(sizeof((x)) / sizeof((x)[0]))
 #endif
 
-#ifdef __MACH__
+#if defined(__MACH__) && !defined(CLOCK_MONOTONIC)
 #include <mach/clock.h>
 #include <mach/mach.h>
 
