@@ -9,15 +9,15 @@ OBJS=	cpu.o ppu.o apu.o sdl.o main.o mapper.o \
 
 CC=	cc
 
-SDL_CFLAGS!=	pkg-config --cflags sdl2
-SDL_LIBS!=	pkg-config --libs sdl2
+SDL_CFLAGS=	$(shell pkg-config --cflags sdl2)
+SDL_LIBS=	$(shell pkg-config --libs sdl2)
 
-OPSYS!=		uname -m
+OPSYS=		$(shell uname -s)
 
 ifneq ($(OPSYS),Darwin)
-LIBDRM_CFLAGS!=	pkg-config --cflags libdrm
+LIBDRM_CFLAGS=	$(shell pkg-config --cflags libdrm)
 LIBDRM_CFLAGS+=	-DHAVE_LIBDRM
-LIBDRM_LIBS!=	pkg-config --libs libdrm
+LIBDRM_LIBS=	$(shell pkg-config --libs libdrm)
 endif
 
 CFLAGS=	$(SDL_CFLAGS) $(LIBDRM_CFLAGS) -g -O2
