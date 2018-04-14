@@ -522,21 +522,7 @@ ppu_step(struct ppu_context *p)
 		const int show_sprites = (p->regs[REG_PPUMASK] & PPUMASK_s) != 0;
 		const int render_enable = show_background || show_sprites;
 
-		if (render_enable && scanline == -1) {
-			/* Pre-render scanline */
-			if (scanline_cycle == 1) {
-				/* Clear VBlank, Sprite 0 Hit */
-				p->regs[REG_PPUSTATUS] &= ~(PPUSTATUS_S | PPUSTATUS_V);
-				p->sprite0_hit = 0;
-			} else if (scanline_cycle >= 280 && scanline_cycle <= 304) {
-				/* Reload vertical scroll position */
-				p->reg_v &= ~0x7be0;
-				p->reg_v |= (p->reg_t & 0x7be0);
-#ifdef PPU_DEBUG
-				printf("PPU V   $%04X\n", p->reg_v);
-#endif
-			}
-		} else if (render_enable && scanline >= 0 && scanline <= 239) {
+		if (render_enable && scanline >= 0 && scanline <= 239) {
 			/* Visible scanlines */
 			if (scanline_cycle == 0) {
 				/* Idle cycle */
@@ -550,6 +536,20 @@ ppu_step(struct ppu_context *p)
 				/* First two tiles for the next scanline are fetched (XXX) */
 			} else if (scanline_cycle >= 337 && scanline_cycle <= 340) {
 				/* Two nametable bytes are fetched for unknown purposes (XXX) */
+			}
+		} else if (render_enable && scanline == -1) {
+			/* Pre-render scanline */
+			if (scanline_cycle == 1) {
+				/* Clear VBlank, Sprite 0 Hit */
+				p->regs[REG_PPUSTATUS] &= ~(PPUSTATUS_S | PPUSTATUS_V);
+				p->sprite0_hit = 0;
+			} else if (scanline_cycle >= 280 && scanline_cycle <= 304) {
+				/* Reload vertical scroll position */
+				p->reg_v &= ~0x7be0;
+				p->reg_v |= (p->reg_t & 0x7be0);
+#ifdef PPU_DEBUG
+				printf("PPU V   $%04X\n", p->reg_v);
+#endif
 			}
 		} else if (scanline == 240) {
 			/* Post-render scanline */
