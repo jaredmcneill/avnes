@@ -426,13 +426,11 @@ apu_dmc_step(struct apu_context *a, struct apu_dmc *ad)
 		return;
 	}
 
-
 	if (ad->cur_sample_length == 0 && ad->cur_sample_bits == 0) {
 		if (ad->loop_flag) {
 			ad->cur_sample_length = ad->sample_length;
 			ad->cur_sample_address = ad->sample_address;
 			ad->cur_sample_bits = 0;
-			ad->timer_counter = ad->timer;
 			ad->silence = 0;
 		} else {
 			a->status.dmc_active = 0;
@@ -460,6 +458,8 @@ apu_dmc_step(struct apu_context *a, struct apu_dmc *ad)
 
 	if ((unsigned int)(ad->seqval + delta) <= 0x7f)
 		ad->seqval += delta;
+
+	ad->timer_counter = ad->timer;
 }
 
 int
