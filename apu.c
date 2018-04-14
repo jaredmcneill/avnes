@@ -277,6 +277,11 @@ apu_write(struct apu_context *a, uint16_t addr, uint8_t val)
 
 		ad->timer = apu_dmc_rate_table_ntsc[ad->rate_index];
 
+		if (!ad->irq_enable) {
+			/* disabling IRQ enable flag should clear it */
+			a->status.dmc_interrupt = 0;
+		}
+
 		break;
 
 	case REG_DMC__DDDDDDD:
