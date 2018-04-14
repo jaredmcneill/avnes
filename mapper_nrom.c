@@ -44,6 +44,11 @@ struct nrom_context {
 static uint8_t
 nrom_cpuread(struct avnes_context *av, uint16_t addr)
 {
+	struct nrom_context *mc = av->m.priv;
+
+	if (addr >= 0x6000 && addr <= 0x7FFF)
+		return mc->prg_ram[addr - 0x6000];
+
 	if (addr >= 0x8000 && addr <= 0xFFFF)
 		return av->rom_data[av->prg_start + ((addr - 0x8000) & (av->prg_len - 1))];
 
@@ -54,6 +59,13 @@ nrom_cpuread(struct avnes_context *av, uint16_t addr)
 static void
 nrom_cpuwrite(struct avnes_context *av, uint16_t addr, uint8_t val)
 {
+	struct nrom_context *mc = av->m.priv;
+
+	if (addr >= 0x6000 && addr <= 0x7FFF) {
+		mc->prg_ram[addr - 0x6000] = val;
+		return;
+	}
+
 	printf("[%s] CPU address $%04X not mapped\n", __func__, addr);
 }
 
