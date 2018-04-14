@@ -492,6 +492,11 @@ apu_step(struct apu_context *a)
 		apu_dmc_step(a, &a->dmc);
 
 	switch (a->cycle) {
+	case APU_CYCLE(0,0):
+		if (a->counter.mode == 0) {
+			irq = 1;
+		}
+		break;
 	case APU_CYCLE(3728,5):
 		linear_counter = 1;
 		break;
@@ -503,11 +508,13 @@ apu_step(struct apu_context *a)
 		linear_counter = 1;
 		break;
 	case APU_CYCLE(14914,0):
-		irq = 1;
+		if (a->counter.mode == 0) {
+			irq = 1;
+		}
 		break;
 	case APU_CYCLE(14914,5):
-		irq = 1;
 		if (a->counter.mode == 0) {
+			irq = 1;
 			length_counter = 1;
 			linear_counter = 1;
 		}
@@ -523,7 +530,6 @@ apu_step(struct apu_context *a)
 	a->cycle++;
 	if (a->cycle == last_cycle) {
 		a->cycle = 0;
-		irq = 1;
 	}
 
 	if (length_counter) {
