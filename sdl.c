@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <pthread.h>
 
 #include <SDL.h>
 
@@ -270,7 +271,15 @@ sdl_wait_vsync(void)
 	}
 	if (drm_fd == -1) {
 #endif
+
+#if defined(__APPLE__)
+		while (sdl_time_left() > 0) {
+			pthread_yield_np();
+		}
+#else
 		SDL_Delay(sdl_time_left());
+#endif
+
 #if defined(HAVE_LIBDRM)
 	}
 #endif
