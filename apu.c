@@ -476,15 +476,15 @@ apu_step(struct apu_context *a)
 
 	/* Pulse and noise channel timers run at APU (CPU/2) rate */
 	if (!half_cycle) {
-		if (a->status.pulse_enable[0])
+		if (a->status.pulse_enable[0] && a->pulse[0].length_counter > 0)
 			apu_pulse_step(a, &a->pulse[0]);
-		if (a->status.pulse_enable[1])
+		if (a->status.pulse_enable[1] && a->pulse[1].length_counter > 0)
 			apu_pulse_step(a, &a->pulse[1]);
-		if (a->status.noise_enable)
+		if (a->status.noise_enable && a->noise.length_counter > 0)
 			apu_noise_step(a, &a->noise);
 	}
 	/* Triangle channel timer runs at CPU rate */
-	if (a->status.triangle_enable)
+	if (a->status.triangle_enable && a->triangle.length_counter > 0)
 		apu_triangle_step(a, &a->triangle);
 
 	/* DMC rate table is based on CPU clock rate */
@@ -530,21 +530,18 @@ apu_step(struct apu_context *a)
 		if (a->status.pulse_enable[0] && !a->pulse[0].length_counter_halt) {
 			a->pulse[0].length_counter--;
 			if (a->pulse[0].length_counter == 0) {
-				a->status.pulse_enable[0] = 0;
 				a->pulse[0].seqval = 0;
 			}
 		}
 		if (a->status.pulse_enable[1] && !a->pulse[1].length_counter_halt) {
 			a->pulse[1].length_counter--;
 			if (a->pulse[1].length_counter == 0) {
-				a->status.pulse_enable[1] = 0;
 				a->pulse[1].seqval = 0;
 			}
 		}
 		if (a->status.triangle_enable && !a->triangle.length_counter_halt) {
 			a->triangle.length_counter--;
 			if (a->triangle.length_counter == 0) {
-				a->status.triangle_enable = 0;
 				a->triangle.length_counter = a->triangle.linear_counter = 0;
 				a->triangle.seqval = 0;
 			}
@@ -552,7 +549,6 @@ apu_step(struct apu_context *a)
 		if (a->status.noise_enable && !a->noise.length_counter_halt) {
 			a->noise.length_counter--;
 			if (a->noise.length_counter == 0) {
-				a->status.noise_enable = 0;
 				a->noise.length_counter = 0;
 				a->noise.seqval = 0;
 			}
@@ -569,7 +565,6 @@ apu_step(struct apu_context *a)
 				a->triangle.linear_counter_reload = 0;
 			}
 			if (a->triangle.linear_counter == 0) {
-				a->status.triangle_enable = 0;
 				a->triangle.seqval = 0;
 			}
 		}
