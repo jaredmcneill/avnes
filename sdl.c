@@ -279,8 +279,13 @@ sdl_wait_vsync(void)
 void
 sdl_draw(struct ppu_context *p)
 {
-	uint8_t *fb = fbmem;
+	uint8_t *fb;
+	int pitch;
 	SDL_Rect *src;
+
+	sdl_wait_vsync();
+
+	SDL_LockTexture(texture, NULL, (void **)&fb, &pitch);
 
 	for (unsigned int y = 0; y < PPU_HEIGHT; y++) {
 		for (unsigned int x = 0; x < PPU_WIDTH; x++) {
@@ -293,18 +298,15 @@ sdl_draw(struct ppu_context *p)
 		}
 	}
 
+	SDL_UnlockTexture(texture);
+
 	if (audio_buffer_pos > 0) {
 		SDL_QueueAudio(audiodev, audio_buffer, audio_buffer_pos * sizeof(audio_buffer[0]));
 		audio_buffer_pos = 0;
 	}
 
-	sdl_wait_vsync();
-
-	SDL_UpdateTexture(texture, NULL, fbmem, PPU_WIDTH * 4);
-
 	src = overscan ? &rect_overscan : NULL;
 
-	SDL_RenderClear(renderer);
 	SDL_RenderCopy(renderer, texture, src, NULL);
 	SDL_RenderPresent(renderer);
 }
