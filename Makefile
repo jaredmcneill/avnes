@@ -1,6 +1,8 @@
 PROG=	avnes
 OBJS=	cpu.o ppu.o apu.o sdl.o main.o mapper.o \
+	mapper_axrom.o \
 	mapper_cnrom.o \
+	mapper_gxrom.o \
 	mapper_mmc1.o \
 	mapper_mmc2.o \
 	mapper_mmc3.o \
