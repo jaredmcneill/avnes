@@ -52,15 +52,27 @@
 
 #define	OPCODE_COUNT	256
 
+enum cpu_opcode_type {
+	OP_def,
+	OP_imm,
+	OP_zp, OP_zpx, OP_zpy,
+	OP_izx, OP_izy,
+	OP_abs, OP_abx, OP_aby,
+	OP_ind,
+	OP_rel
+};
+
 struct cpu_opcode {
 	uint8_t opcode;
+	const char *name;
+	enum cpu_opcode_type type;
 	uint8_t args;
 	int cycles;
 	int (*op)(struct cpu_context *, struct cpu_opcode *);
 };
 
-#define	OP(o,a,c,f) \
-	[(o)] = { .opcode = (o), .args = (a), .cycles = (c),.op = (f) }
+#define	OP(o,n,t,a,c,f) \
+	[(o)] = { .opcode = (o), .name = (n), .type = (t), .args = (a), .cycles = (c),.op = (f) }
 
 static void
 cpu_stackpush(struct cpu_context *c, uint8_t val)
@@ -1453,159 +1465,223 @@ cpuop_transfer(struct cpu_context *c, struct cpu_opcode *o)
 	return o->cycles;
 }
 
+
+
 static struct cpu_opcode cpu_opcodes[OPCODE_COUNT] = {
-	OP(0x00, 2, 7, cpuop_break),		/* Break */
-	OP(0x01, 2, 6, cpuop_or),		/* Logical Inclusive OR (indirect,X) */
-	OP(0x05, 2, 3, cpuop_or),		/* Logical Inclusive OR (zero page) */
-	OP(0x06, 2, 5, cpuop_shift),		/* Arithmetic shift left (zero page) */
-	OP(0x08, 1, 3, cpuop_push),		/* Push processor status */
-	OP(0x09, 2, 2, cpuop_or),		/* Logical Inclusive OR (immediate) */
-	OP(0x0A, 1, 2, cpuop_shift),		/* Arithmetic shift left (accumulator) */
-	OP(0x0D, 3, 4, cpuop_or),		/* Logical Inclusive OR (absolute) */
-	OP(0x0E, 3, 6, cpuop_shift),		/* Arithmetic shift left (absolute) */
-	OP(0x10, 2, 2, cpuop_branch),		/* Branch if positive */
-	OP(0x11, 2, 5, cpuop_or),		/* Logical Inclusive OR (indirect,Y) */
-	OP(0x15, 2, 4, cpuop_or),		/* Logical Inclusive OR (zero page,X) */
-	OP(0x16, 2, 6, cpuop_shift),		/* Arithmetic shift left (zero page,X) */
-	OP(0x18, 1, 2, cpuop_clc),		/* Clear carry flag */
-	OP(0x19, 3, 4, cpuop_or),		/* Logical Inclusive OR (absolute,Y) */
-	OP(0x1D, 3, 4, cpuop_or),		/* Logical Inclusive OR (absolute,X) */
-	OP(0x1E, 3, 7, cpuop_shift),		/* Arithmetic shift left (absolute,X) */
-	OP(0x20, 3, 6, cpuop_jmp),		/* Jump to subroutine */
-	OP(0x21, 2, 6, cpuop_and),		/* Logical AND (indirect,X) */
-	OP(0x24, 2, 3, cpuop_test),		/* Bit test (zero page) */
-	OP(0x25, 2, 3, cpuop_and),		/* Logical AND (zero page) */
-	OP(0x26, 2, 5, cpuop_shift),		/* Rotate left (zero page) */
-	OP(0x28, 1, 4, cpuop_pull),		/* Pull processor status */
-	OP(0x29, 2, 2, cpuop_and),		/* Logical AND (immediate) */
-	OP(0x2A, 1, 2, cpuop_shift),		/* Rotate left (accumulator) */
-	OP(0x2C, 3, 4, cpuop_test),		/* Bit test (absolute) */
-	OP(0x2D, 3, 4, cpuop_and),		/* Logical AND (absolute) */
-	OP(0x2E, 3, 6, cpuop_shift),		/* Rotate left (absolute) */
-	OP(0x30, 2, 2, cpuop_branch),		/* Branch if minus */
-	OP(0x31, 2, 5, cpuop_and),		/* Logical AND (indirect,Y) */
-	OP(0x35, 2, 4, cpuop_and),		/* Logical AND (zero page,X) */
-	OP(0x36, 2, 6, cpuop_shift),		/* Rotate left (zero page,X) */
-	OP(0x38, 1, 2, cpuop_sec),		/* Set carry flag */
-	OP(0x39, 3, 4, cpuop_and),		/* Logical AND (absolute,Y) */
-	OP(0x3D, 3, 4, cpuop_and),		/* Logical AND (absolute,X) */
-	OP(0x3E, 3, 7, cpuop_shift),		/* Rotate left (absolute,X) */
-	OP(0x40, 1, 6, cpuop_ret),		/* Return from interrupt */
-	OP(0x41, 2, 6, cpuop_xor),		/* Exclusive OR (indirect,X) */
-	OP(0x45, 2, 3, cpuop_xor),		/* Exclusive OR (zero page) */
-	OP(0x46, 2, 5, cpuop_shift),		/* Logical shift right (zero page) */
-	OP(0x48, 1, 3, cpuop_push),		/* Push accumulator */
-	OP(0x49, 2, 2, cpuop_xor),		/* Exclusive OR (immediate) */
-	OP(0x4A, 1, 2, cpuop_shift),		/* Logical shift right (accumulator) */
-	OP(0x4C, 3, 3, cpuop_jmp),		/* Jump (absolute) */
-	OP(0x4D, 3, 4, cpuop_xor),		/* Exclusive OR (absolute) */
-	OP(0x4E, 3, 6, cpuop_shift),		/* Logical shift right (absolute) */
-	OP(0x50, 2, 2, cpuop_branch),		/* Branch if overflow clear */
-	OP(0x51, 2, 5, cpuop_xor),		/* Exclusive OR (indirect,Y) */
-	OP(0x55, 2, 4, cpuop_xor),		/* Exclusive OR (zero page,X) */
-	OP(0x56, 2, 6, cpuop_shift),		/* Logical shift right (zero page,X) */
-	OP(0x58, 1, 2, cpuop_cli),		/* Clear interrupt disable */
-	OP(0x59, 3, 4, cpuop_xor),		/* Exclusive OR (absolute,Y) */
-	OP(0x5D, 3, 4, cpuop_xor),		/* Exclusive OR (absolute,X) */
-	OP(0x5E, 3, 7, cpuop_shift),		/* Logical shift right (absolute,X) */
-	OP(0x60, 1, 6, cpuop_ret),		/* Return from subroutine */
-	OP(0x61, 2, 6, cpuop_add),		/* Add with carry (indirect,X) */
-	OP(0x65, 2, 3, cpuop_add),		/* Add with carry (zero page) */
-	OP(0x66, 2, 5, cpuop_shift),		/* Rotate right (zero page) */
-	OP(0x68, 1, 4, cpuop_pull),		/* Pull accumulator */
-	OP(0x69, 2, 2, cpuop_add),		/* Add with carry (immediate) */
-	OP(0x6A, 1, 2, cpuop_shift),		/* Rotate right accumulator */
-	OP(0x6C, 3, 5, cpuop_jmp),		/* Jump (indirect) */
-	OP(0x6D, 3, 4, cpuop_add),		/* Add with carry (absolute) */
-	OP(0x6E, 3, 6, cpuop_shift),		/* Rotate right (absolute) */
-	OP(0x70, 2, 2, cpuop_branch),		/* Branch if overflow set */
-	OP(0x71, 2, 5, cpuop_add),		/* Add with carry (indirect,Y) */
-	OP(0x75, 2, 4, cpuop_add),		/* Add with carry (zero page,X) */
-	OP(0x76, 2, 6, cpuop_shift),		/* Rotate right (zero page,X) */
-	OP(0x78, 1, 2, cpuop_sei),		/* Set interrupt disable */
-	OP(0x79, 3, 4, cpuop_add),		/* Add with carry (absolute,Y) */
-	OP(0x7D, 3, 4, cpuop_add),		/* Add with carry (absolute,X) */
-	OP(0x7E, 3, 7, cpuop_shift),		/* Rotate right (absolute,X) */
-	OP(0x81, 2, 6, cpuop_store),		/* STA (indirect,X) */
-	OP(0x84, 2, 3, cpuop_store),		/* STY (zero page) */
-	OP(0x85, 2, 3, cpuop_store),		/* STA (zero page) */
-	OP(0x86, 2, 3, cpuop_store),		/* STX (zero page) */
-	OP(0x88, 1, 2, cpuop_decrement),	/* Decrement Y register */
-	OP(0x8A, 1, 2, cpuop_transfer),		/* Transfer X to accumulator */
-	OP(0x8C, 3, 4, cpuop_store),		/* STY (absolute) */
-	OP(0x8D, 3, 4, cpuop_store),		/* STA (absolute) */
-	OP(0x8E, 3, 4, cpuop_store),		/* STX (absolute) */
-	OP(0x90, 2, 2, cpuop_branch),		/* Branch if carry clear */
-	OP(0x91, 2, 6, cpuop_store),		/* STA (indirect,Y) */
-	OP(0x94, 2, 4, cpuop_store),		/* STY (zero page,X) */
-	OP(0x95, 2, 4, cpuop_store),		/* STA (zero page,X) */
-	OP(0x96, 2, 4, cpuop_store),		/* STX (zero page,Y) */
-	OP(0x98, 1, 2, cpuop_transfer),		/* Transfer Y to accumulator */
-	OP(0x99, 3, 5, cpuop_store),		/* STA (absolute,Y) */
-	OP(0x9A, 1, 2, cpuop_transfer),		/* Transfer X to stack pointer */
-	OP(0x9D, 3, 5, cpuop_store),		/* STA (absolute,X) */
-	OP(0xA0, 2, 2, cpuop_load),		/* LDY (immediate) */
-	OP(0xA1, 2, 6, cpuop_load),		/* LDA (indirect,X) */
-	OP(0xA2, 2, 2, cpuop_load),		/* LDX (immediate) */
-	OP(0xA4, 2, 3, cpuop_load),		/* LDY (zero page) */
-	OP(0xA5, 2, 3, cpuop_load),		/* LDA (zero page) */
-	OP(0xA6, 2, 3, cpuop_load),		/* LDX (zero page) */
-	OP(0xA8, 1, 2, cpuop_transfer),		/* Transfer accumulator to Y */
-	OP(0xA9, 2, 2, cpuop_load),		/* LDA (immediate) */
-	OP(0xAA, 1, 2, cpuop_transfer),		/* Transfer accumulator to X */
-	OP(0xAC, 3, 4, cpuop_load),		/* LDY (absolute) */
-	OP(0xAD, 3, 4, cpuop_load),		/* LDA (absolute) */
-	OP(0xAE, 3, 4, cpuop_load),		/* LDX (absolute) */
-	OP(0xB0, 2, 2, cpuop_branch),		/* Branch if carry set */
-	OP(0xB1, 2, 5, cpuop_load),		/* LDA (indirect,Y) */
-	OP(0xB4, 2, 4, cpuop_load),		/* LDY (zero page,X) */
-	OP(0xB5, 2, 4, cpuop_load),		/* LDA (zero page,X) */
-	OP(0xB6, 2, 4, cpuop_load),		/* LDA (zero page,Y) */
-	OP(0xB8, 1, 2, cpuop_clv),		/* Clear overflow flag */
-	OP(0xB9, 3, 4, cpuop_load),		/* LDA (absolute,Y) */
-	OP(0xBA, 1, 2, cpuop_transfer),		/* Transfer stack pointer to X */
-	OP(0xBC, 3, 4, cpuop_load),		/* LDY (absolute,X) */
-	OP(0xBD, 3, 4, cpuop_load),		/* LDA (absolute,X) */
-	OP(0xBE, 3, 4, cpuop_load),		/* LDX (absolute,Y) */
-	OP(0xC0, 2, 2, cpuop_compare),		/* Compare Y register (immediate) */
-	OP(0xC1, 2, 6, cpuop_compare),		/* Compare (indirect,X) */
-	OP(0xC4, 2, 3, cpuop_compare),		/* Compare Y register (zero page) */
-	OP(0xC5, 2, 3, cpuop_compare),		/* Compare (zero page) */
-	OP(0xC6, 2, 5, cpuop_decrement),	/* Decrement memory (zero page) */
-	OP(0xC8, 1, 2, cpuop_increment),	/* Increment Y register */
-	OP(0xC9, 2, 2, cpuop_compare),		/* Compare (immediate) */
-	OP(0xCA, 1, 2, cpuop_decrement),	/* Decrement X register */
-	OP(0xCC, 3, 4, cpuop_compare),		/* Compare Y register (absolute) */
-	OP(0xCD, 3, 4, cpuop_compare),		/* Compare (absolute) */
-	OP(0xCE, 3, 6, cpuop_decrement),	/* Decrement memory (absolute) */
-	OP(0xD0, 2, 2, cpuop_branch),		/* Branch if not equal */
-	OP(0xD1, 2, 5, cpuop_compare),		/* Compare (indirect,Y) */
-	OP(0xD5, 2, 4, cpuop_compare),		/* Compare (zero page,X) */
-	OP(0xD6, 2, 6, cpuop_decrement),	/* Decrement memory (zero page,X) */
-	OP(0xD8, 1, 2, cpuop_cld),		/* Clear decimal mode */
-	OP(0xD9, 3, 4, cpuop_compare),		/* Compare (absolute,Y) */
-	OP(0xDD, 3, 4, cpuop_compare),		/* Compare (absolute,X) */
-	OP(0xDE, 3, 7, cpuop_decrement),	/* Decrement memory (absolute,X) */
-	OP(0xE0, 2, 2, cpuop_compare),		/* Compare X register (immediate) */
-	OP(0xE1, 2, 6, cpuop_subtract),		/* Subtract with carry (indirect,X) */
-	OP(0xE4, 2, 3, cpuop_compare),		/* Compare X register (zero page) */
-	OP(0xE5, 2, 3, cpuop_subtract),		/* Subtract with carry (zero page) */
-	OP(0xE6, 2, 5, cpuop_increment),	/* Increment memory (zero page) */
-	OP(0xE8, 1, 2, cpuop_increment),	/* Increment X register */
-	OP(0xE9, 2, 2, cpuop_subtract),		/* Subtract with carry (immediate) */
-	OP(0xEA, 1, 2, cpuop_nop),		/* No operation (implied) */
-	OP(0xEC, 3, 4, cpuop_compare),		/* Compare X register (absolute) */
-	OP(0xED, 3, 4, cpuop_subtract),		/* Subtract with carry (absolute) */
-	OP(0xEE, 3, 6, cpuop_increment),	/* Increment memory (absolute) */
-	OP(0xF0, 2, 2, cpuop_branch),		/* Branch if equal */
-	OP(0xF1, 2, 5, cpuop_subtract),		/* Subtract with carry (indirect,Y) */
-	OP(0xF5, 2, 4, cpuop_subtract),		/* Subtract with carry (zero page,X) */
-	OP(0xF6, 2, 6, cpuop_increment),	/* Increment memory (zero page,X) */
-	OP(0xF8, 1, 2, cpuop_sed),		/* Set decimal flag */
-	OP(0xF9, 3, 4, cpuop_subtract),		/* Subtract with carry (absolute,Y) */
-	OP(0xFD, 3, 4, cpuop_subtract),		/* Subtract with carry (absolute,X) */
-	OP(0xFE, 3, 7, cpuop_increment),	/* Increment memory (absolute,X) */
+	OP(0x00, "BRK", OP_def, 2, 7, cpuop_break),		/* Break */
+	OP(0x01, "ORA", OP_izx, 2, 6, cpuop_or),		/* Logical Inclusive OR (indirect,X) */
+	OP(0x05, "ORA", OP_zp,  2, 3, cpuop_or),		/* Logical Inclusive OR (zero page) */
+	OP(0x06, "ASL", OP_zp,  2, 5, cpuop_shift),		/* Arithmetic shift left (zero page) */
+	OP(0x08, "PHP", OP_def, 1, 3, cpuop_push),		/* Push processor status */
+	OP(0x09, "ORA", OP_imm, 2, 2, cpuop_or),		/* Logical Inclusive OR (immediate) */
+	OP(0x0A, "ASL", OP_def, 1, 2, cpuop_shift),		/* Arithmetic shift left (accumulator) */
+	OP(0x0D, "ANC", OP_abs, 3, 4, cpuop_or),		/* Logical Inclusive OR (absolute) */
+	OP(0x0E, "ASL", OP_abs, 3, 6, cpuop_shift),		/* Arithmetic shift left (absolute) */
+	OP(0x10, "BPL", OP_rel, 2, 2, cpuop_branch),		/* Branch if positive */
+	OP(0x11, "ORA", OP_izy, 2, 5, cpuop_or),		/* Logical Inclusive OR (indirect,Y) */
+	OP(0x15, "ORA", OP_zpx, 2, 4, cpuop_or),		/* Logical Inclusive OR (zero page,X) */
+	OP(0x16, "ASL", OP_zpx, 2, 6, cpuop_shift),		/* Arithmetic shift left (zero page,X) */
+	OP(0x18, "CLC", OP_def, 1, 2, cpuop_clc),		/* Clear carry flag */
+	OP(0x19, "ORA", OP_aby, 3, 4, cpuop_or),		/* Logical Inclusive OR (absolute,Y) */
+	OP(0x1D, "ORA", OP_abx, 3, 4, cpuop_or),		/* Logical Inclusive OR (absolute,X) */
+	OP(0x1E, "ASL", OP_abx, 3, 7, cpuop_shift),		/* Arithmetic shift left (absolute,X) */
+	OP(0x20, "JSR", OP_abs, 3, 6, cpuop_jmp),		/* Jump to subroutine */
+	OP(0x21, "AND", OP_izx, 2, 6, cpuop_and),		/* Logical AND (indirect,X) */
+	OP(0x24, "BIT", OP_zp,  2, 3, cpuop_test),		/* Bit test (zero page) */
+	OP(0x25, "AND", OP_zp,  2, 3, cpuop_and),		/* Logical AND (zero page) */
+	OP(0x26, "ROL", OP_zp,  2, 5, cpuop_shift),		/* Rotate left (zero page) */
+	OP(0x28, "PLP", OP_def, 1, 4, cpuop_pull),		/* Pull processor status */
+	OP(0x29, "AND", OP_imm, 2, 2, cpuop_and),		/* Logical AND (immediate) */
+	OP(0x2A, "ROL", OP_def, 1, 2, cpuop_shift),		/* Rotate left (accumulator) */
+	OP(0x2C, "BIT", OP_abs, 3, 4, cpuop_test),		/* Bit test (absolute) */
+	OP(0x2D, "AND", OP_abs, 3, 4, cpuop_and),		/* Logical AND (absolute) */
+	OP(0x2E, "ROL", OP_abs, 3, 6, cpuop_shift),		/* Rotate left (absolute) */
+	OP(0x30, "BMI", OP_rel, 2, 2, cpuop_branch),		/* Branch if minus */
+	OP(0x31, "AND", OP_izy, 2, 5, cpuop_and),		/* Logical AND (indirect,Y) */
+	OP(0x35, "AND", OP_zpx, 2, 4, cpuop_and),		/* Logical AND (zero page,X) */
+	OP(0x36, "ROL", OP_zpx, 2, 6, cpuop_shift),		/* Rotate left (zero page,X) */
+	OP(0x38, "SEC", OP_def, 1, 2, cpuop_sec),		/* Set carry flag */
+	OP(0x39, "AND", OP_aby, 3, 4, cpuop_and),		/* Logical AND (absolute,Y) */
+	OP(0x3D, "AND", OP_abx, 3, 4, cpuop_and),		/* Logical AND (absolute,X) */
+	OP(0x3E, "ROL", OP_abx, 3, 7, cpuop_shift),		/* Rotate left (absolute,X) */
+	OP(0x40, "RTI", OP_def, 1, 6, cpuop_ret),		/* Return from interrupt */
+	OP(0x41, "EOR", OP_izx, 2, 6, cpuop_xor),		/* Exclusive OR (indirect,X) */
+	OP(0x45, "EOR", OP_zp,  2, 3, cpuop_xor),		/* Exclusive OR (zero page) */
+	OP(0x46, "LSR", OP_zp,  2, 5, cpuop_shift),		/* Logical shift right (zero page) */
+	OP(0x48, "PHA", OP_def, 1, 3, cpuop_push),		/* Push accumulator */
+	OP(0x49, "EOR", OP_imm, 2, 2, cpuop_xor),		/* Exclusive OR (immediate) */
+	OP(0x4A, "LSR", OP_def, 1, 2, cpuop_shift),		/* Logical shift right (accumulator) */
+	OP(0x4C, "JMP", OP_abs, 3, 3, cpuop_jmp),		/* Jump (absolute) */
+	OP(0x4D, "EOR", OP_abs, 3, 4, cpuop_xor),		/* Exclusive OR (absolute) */
+	OP(0x4E, "LSR", OP_abs, 3, 6, cpuop_shift),		/* Logical shift right (absolute) */
+	OP(0x50, "BVC", OP_rel, 2, 2, cpuop_branch),		/* Branch if overflow clear */
+	OP(0x51, "EOR", OP_izy, 2, 5, cpuop_xor),		/* Exclusive OR (indirect,Y) */
+	OP(0x55, "EOR", OP_zpx, 2, 4, cpuop_xor),		/* Exclusive OR (zero page,X) */
+	OP(0x56, "LSR", OP_zpx, 2, 6, cpuop_shift),		/* Logical shift right (zero page,X) */
+	OP(0x58, "CLI", OP_def, 1, 2, cpuop_cli),		/* Clear interrupt disable */
+	OP(0x59, "EOR", OP_aby, 3, 4, cpuop_xor),		/* Exclusive OR (absolute,Y) */
+	OP(0x5D, "EOR", OP_abx, 3, 4, cpuop_xor),		/* Exclusive OR (absolute,X) */
+	OP(0x5E, "LSR", OP_abx, 3, 7, cpuop_shift),		/* Logical shift right (absolute,X) */
+	OP(0x60, "RTS", OP_def, 1, 6, cpuop_ret),		/* Return from subroutine */
+	OP(0x61, "ADC", OP_izx, 2, 6, cpuop_add),		/* Add with carry (indirect,X) */
+	OP(0x65, "ADC", OP_zp,  2, 3, cpuop_add),		/* Add with carry (zero page) */
+	OP(0x66, "ROR", OP_zp,  2, 5, cpuop_shift),		/* Rotate right (zero page) */
+	OP(0x68, "PLA", OP_def, 1, 4, cpuop_pull),		/* Pull accumulator */
+	OP(0x69, "ADC", OP_imm, 2, 2, cpuop_add),		/* Add with carry (immediate) */
+	OP(0x6A, "ROR", OP_def, 1, 2, cpuop_shift),		/* Rotate right accumulator */
+	OP(0x6C, "JMP", OP_ind, 3, 5, cpuop_jmp),		/* Jump (indirect) */
+	OP(0x6D, "ADC", OP_abs, 3, 4, cpuop_add),		/* Add with carry (absolute) */
+	OP(0x6E, "ROR", OP_abs, 3, 6, cpuop_shift),		/* Rotate right (absolute) */
+	OP(0x70, "BVS", OP_rel, 2, 2, cpuop_branch),		/* Branch if overflow set */
+	OP(0x71, "ADC", OP_izy, 2, 5, cpuop_add),		/* Add with carry (indirect,Y) */
+	OP(0x75, "ADC", OP_zpx, 2, 4, cpuop_add),		/* Add with carry (zero page,X) */
+	OP(0x76, "ROR", OP_zpx, 2, 6, cpuop_shift),		/* Rotate right (zero page,X) */
+	OP(0x78, "SEI", OP_def, 1, 2, cpuop_sei),		/* Set interrupt disable */
+	OP(0x79, "ADC", OP_aby, 3, 4, cpuop_add),		/* Add with carry (absolute,Y) */
+	OP(0x7D, "ADC", OP_abx, 3, 4, cpuop_add),		/* Add with carry (absolute,X) */
+	OP(0x7E, "ROR", OP_abx, 3, 7, cpuop_shift),		/* Rotate right (absolute,X) */
+	OP(0x81, "STA", OP_izx, 2, 6, cpuop_store),		/* STA (indirect,X) */
+	OP(0x84, "STY", OP_zp,  2, 3, cpuop_store),		/* STY (zero page) */
+	OP(0x85, "STA", OP_zp,  2, 3, cpuop_store),		/* STA (zero page) */
+	OP(0x86, "STX", OP_zp,  2, 3, cpuop_store),		/* STX (zero page) */
+	OP(0x88, "DEY", OP_def, 1, 2, cpuop_decrement),		/* Decrement Y register */
+	OP(0x8A, "TXA", OP_def, 1, 2, cpuop_transfer),		/* Transfer X to accumulator */
+	OP(0x8C, "STY", OP_abs, 3, 4, cpuop_store),		/* STY (absolute) */
+	OP(0x8D, "STA", OP_abs, 3, 4, cpuop_store),		/* STA (absolute) */
+	OP(0x8E, "STX", OP_abs, 3, 4, cpuop_store),		/* STX (absolute) */
+	OP(0x90, "BCC", OP_rel, 2, 2, cpuop_branch),		/* Branch if carry clear */
+	OP(0x91, "STA", OP_izy, 2, 6, cpuop_store),		/* STA (indirect,Y) */
+	OP(0x94, "STY", OP_zpx, 2, 4, cpuop_store),		/* STY (zero page,X) */
+	OP(0x95, "STA", OP_zpx, 2, 4, cpuop_store),		/* STA (zero page,X) */
+	OP(0x96, "STX", OP_zpy, 2, 4, cpuop_store),		/* STX (zero page,Y) */
+	OP(0x98, "TYA", OP_def, 1, 2, cpuop_transfer),		/* Transfer Y to accumulator */
+	OP(0x99, "STA", OP_aby, 3, 5, cpuop_store),		/* STA (absolute,Y) */
+	OP(0x9A, "TXS", OP_def, 1, 2, cpuop_transfer),		/* Transfer X to stack pointer */
+	OP(0x9D, "STA", OP_abx, 3, 5, cpuop_store),		/* STA (absolute,X) */
+	OP(0xA0, "LDY", OP_imm, 2, 2, cpuop_load),		/* LDY (immediate) */
+	OP(0xA1, "LDA", OP_izx, 2, 6, cpuop_load),		/* LDA (indirect,X) */
+	OP(0xA2, "LDX", OP_imm, 2, 2, cpuop_load),		/* LDX (immediate) */
+	OP(0xA4, "LDY", OP_zp,  2, 3, cpuop_load),		/* LDY (zero page) */
+	OP(0xA5, "LDA", OP_zp,  2, 3, cpuop_load),		/* LDA (zero page) */
+	OP(0xA6, "LDX", OP_zp,  2, 3, cpuop_load),		/* LDX (zero page) */
+	OP(0xA8, "TAY", OP_def, 1, 2, cpuop_transfer),		/* Transfer accumulator to Y */
+	OP(0xA9, "LDA", OP_imm, 2, 2, cpuop_load),		/* LDA (immediate) */
+	OP(0xAA, "TXA", OP_def, 1, 2, cpuop_transfer),		/* Transfer accumulator to X */
+	OP(0xAC, "LDY", OP_abs, 3, 4, cpuop_load),		/* LDY (absolute) */
+	OP(0xAD, "LDA", OP_abs, 3, 4, cpuop_load),		/* LDA (absolute) */
+	OP(0xAE, "LDX", OP_abs, 3, 4, cpuop_load),		/* LDX (absolute) */
+	OP(0xB0, "BCS", OP_rel, 2, 2, cpuop_branch),		/* Branch if carry set */
+	OP(0xB1, "LDA", OP_izy, 2, 5, cpuop_load),		/* LDA (indirect,Y) */
+	OP(0xB4, "LDY", OP_zpx, 2, 4, cpuop_load),		/* LDY (zero page,X) */
+	OP(0xB5, "LDA", OP_zpx, 2, 4, cpuop_load),		/* LDA (zero page,X) */
+	OP(0xB6, "LDA", OP_zpy, 2, 4, cpuop_load),		/* LDA (zero page,Y) */
+	OP(0xB8, "CLV", OP_def, 1, 2, cpuop_clv),		/* Clear overflow flag */
+	OP(0xB9, "LDA", OP_aby, 3, 4, cpuop_load),		/* LDA (absolute,Y) */
+	OP(0xBA, "TSX", OP_def, 1, 2, cpuop_transfer),		/* Transfer stack pointer to X */
+	OP(0xBC, "LDY", OP_abx, 3, 4, cpuop_load),		/* LDY (absolute,X) */
+	OP(0xBD, "LDA", OP_abx, 3, 4, cpuop_load),		/* LDA (absolute,X) */
+	OP(0xBE, "LDX", OP_aby, 3, 4, cpuop_load),		/* LDX (absolute,Y) */
+	OP(0xC0, "CPY", OP_imm, 2, 2, cpuop_compare),		/* Compare Y register (immediate) */
+	OP(0xC1, "CMP", OP_izx, 2, 6, cpuop_compare),		/* Compare (indirect,X) */
+	OP(0xC4, "CPY", OP_zp,  2, 3, cpuop_compare),		/* Compare Y register (zero page) */
+	OP(0xC5, "CMP", OP_zp,  2, 3, cpuop_compare),		/* Compare (zero page) */
+	OP(0xC6, "DEC", OP_zp,  2, 5, cpuop_decrement),		/* Decrement memory (zero page) */
+	OP(0xC8, "INY", OP_def, 1, 2, cpuop_increment),		/* Increment Y register */
+	OP(0xC9, "CMP", OP_imm, 2, 2, cpuop_compare),		/* Compare (immediate) */
+	OP(0xCA, "DEX", OP_def, 1, 2, cpuop_decrement),		/* Decrement X register */
+	OP(0xCC, "CPY", OP_abs, 3, 4, cpuop_compare),		/* Compare Y register (absolute) */
+	OP(0xCD, "CMP", OP_abs, 3, 4, cpuop_compare),		/* Compare (absolute) */
+	OP(0xCE, "DEC", OP_abs, 3, 6, cpuop_decrement),		/* Decrement memory (absolute) */
+	OP(0xD0, "BNE", OP_rel, 2, 2, cpuop_branch),		/* Branch if not equal */
+	OP(0xD1, "CMP", OP_izy, 2, 5, cpuop_compare),		/* Compare (indirect,Y) */
+	OP(0xD5, "CMP", OP_zpx, 2, 4, cpuop_compare),		/* Compare (zero page,X) */
+	OP(0xD6, "DEC", OP_zpx, 2, 6, cpuop_decrement),		/* Decrement memory (zero page,X) */
+	OP(0xD8, "CLD", OP_def, 1, 2, cpuop_cld),		/* Clear decimal mode */
+	OP(0xD9, "CMP", OP_aby, 3, 4, cpuop_compare),		/* Compare (absolute,Y) */
+	OP(0xDD, "CMP", OP_abx, 3, 4, cpuop_compare),		/* Compare (absolute,X) */
+	OP(0xDE, "DEC", OP_abx, 3, 7, cpuop_decrement),		/* Decrement memory (absolute,X) */
+	OP(0xE0, "CPX", OP_imm, 2, 2, cpuop_compare),		/* Compare X register (immediate) */
+	OP(0xE1, "SBC", OP_izx, 2, 6, cpuop_subtract),		/* Subtract with carry (indirect,X) */
+	OP(0xE4, "CPX", OP_zp,  2, 3, cpuop_compare),		/* Compare X register (zero page) */
+	OP(0xE5, "SBC", OP_zp,  2, 3, cpuop_subtract),		/* Subtract with carry (zero page) */
+	OP(0xE6, "INC", OP_zp,  2, 5, cpuop_increment),		/* Increment memory (zero page) */
+	OP(0xE8, "INX", OP_def, 1, 2, cpuop_increment),		/* Increment X register */
+	OP(0xE9, "SBC", OP_imm, 2, 2, cpuop_subtract),		/* Subtract with carry (immediate) */
+	OP(0xEA, "NOP", OP_def, 1, 2, cpuop_nop),		/* No operation (implied) */
+	OP(0xEC, "CPX", OP_abs, 3, 4, cpuop_compare),		/* Compare X register (absolute) */
+	OP(0xED, "SBC", OP_abs, 3, 4, cpuop_subtract),		/* Subtract with carry (absolute) */
+	OP(0xEE, "INC", OP_abs, 3, 6, cpuop_increment),		/* Increment memory (absolute) */
+	OP(0xF0, "BEQ", OP_rel, 2, 2, cpuop_branch),		/* Branch if equal */
+	OP(0xF1, "SBC", OP_izy, 2, 5, cpuop_subtract),		/* Subtract with carry (indirect,Y) */
+	OP(0xF5, "SBC", OP_zpx, 2, 4, cpuop_subtract),		/* Subtract with carry (zero page,X) */
+	OP(0xF6, "INC", OP_zpx, 2, 6, cpuop_increment),		/* Increment memory (zero page,X) */
+	OP(0xF8, "SED", OP_def, 1, 2, cpuop_sed),		/* Set decimal flag */
+	OP(0xF9, "SBC", OP_aby, 3, 4, cpuop_subtract),		/* Subtract with carry (absolute,Y) */
+	OP(0xFD, "SBC", OP_abx, 3, 4, cpuop_subtract),		/* Subtract with carry (absolute,X) */
+	OP(0xFE, "INC", OP_abx, 3, 7, cpuop_increment),		/* Increment memory (absolute,X) */
 };
+
+static void
+cpu_decodeop(struct cpu_context *c, struct cpu_opcode *o)
+{
+	struct cpu_frame *f = &c->frame;
+	int i;
+
+	printf("%s", o->name);
+	switch (o->type) {
+	case OP_imm:
+		assert(o->args == 2);
+		printf(" #$%02X", CPU_READ8(c, f->PC + 1));
+		break;
+	case OP_zp:
+		assert(o->args == 2);
+		printf(" $%02X", CPU_READ8(c, f->PC + 1));
+		break;
+	case OP_zpx:
+		assert(o->args == 2);
+		printf(" $%02X,X", CPU_READ8(c, f->PC + 1));
+		break;
+	case OP_zpy:
+		assert(o->args == 2);
+		printf(" $%02X,Y", CPU_READ8(c, f->PC + 1));
+		break;
+	case OP_izx:
+		assert(o->args == 2);
+		printf(" ($%02X,X)", CPU_READ8(c, f->PC + 1));
+		break;
+	case OP_izy:
+		assert(o->args == 2);
+		printf(" ($%02X),Y", CPU_READ8(c, f->PC + 1));
+		break;
+	case OP_abs:
+		assert(o->args == 3);
+		printf(" $%04X", CPU_READ16(c, f->PC + 1));
+		break;
+	case OP_abx:
+		assert(o->args == 3);
+		printf(" $%04X,X", CPU_READ16(c, f->PC + 1));
+		break;
+	case OP_aby:
+		assert(o->args == 3);
+		printf(" $%04X,Y", CPU_READ16(c, f->PC + 1));
+		break;
+	case OP_ind:
+		assert(o->args == 3);
+		printf(" ($%04X)", CPU_READ16(c, f->PC + 1));
+		break;
+	case OP_rel:
+		assert(o->args == 2);
+		printf(" $%04X # PC-relative", f->PC + o->args + CPU_READ8(c, f->PC + 1));
+		break;
+	case OP_def:
+		break;
+	default:
+		for (i = 1; i < o->args; i++)
+			printf(" $%02X", CPU_READ8(c, f->PC + i));
+		break;
+	}
+	printf("\n");
+}
 
 static void
 cpu_dumpop(struct cpu_context *c, struct cpu_opcode *o)
@@ -1613,25 +1689,22 @@ cpu_dumpop(struct cpu_context *c, struct cpu_opcode *o)
 	struct cpu_frame *f = &c->frame;
 	int i;
 
-	printf(" PC=$%04X SP=$%02X A=$%02X X=$%02X Y=$%02X P=$%02X [%c%c%c%c%c%c%c%c]   ",
+	printf("%8d ", (int)c->insns);
+
+	printf("[PC=$%04X SP=$%02X A=$%02X X=$%02X Y=$%02X P=$%02X %c%c%c%c%c%c%c%c]        ",
 	    f->PC, f->SP, (uint8_t)f->A, f->X, f->Y, f->P,
-	    (f->P & P_N) ? 'N' : ' ',
-	    (f->P & P_V) ? 'V' : ' ',
-	    (f->P & P_U) ? 'U' : ' ',
-	    (f->P & P_B) ? 'B' : ' ',
-	    (f->P & P_D) ? 'D' : ' ',
-	    (f->P & P_I) ? 'I' : ' ',
-	    (f->P & P_Z) ? 'Z' : ' ',
-	    (f->P & P_C) ? 'C' : ' '
+	    (f->P & P_N) ? 'N' : '-',
+	    (f->P & P_V) ? 'V' : '-',
+	    (f->P & P_U) ? 'U' : '-',
+	    (f->P & P_B) ? 'B' : '-',
+	    (f->P & P_D) ? 'D' : '-',
+	    (f->P & P_I) ? 'I' : '-',
+	    (f->P & P_Z) ? 'Z' : '-',
+	    (f->P & P_C) ? 'C' : '-'
 	);
 
 	if (o) {
-		printf("%8d [insn $%02X", (int)c->insns, o->opcode);
-		for (i = 1; i < o->args; i++)
-			printf(" $%02X", CPU_READ8(c, f->PC + i));
-		printf("]\n");
-	} else {
-		printf("%8d\n", (int)c->insns);
+		cpu_decodeop(c, o);
 	}
 
 #if 0
@@ -1651,6 +1724,10 @@ cpu_init(struct cpu_context *c)
 	c->ticks = 0;
 	c->delay = 0;
 	c->fetch = 1;
+	c->debug = 0;
+
+	if (getenv("AVNES_CPU_DEBUG") && *getenv("AVNES_CPU_DEBUG") == '1')
+		c->debug = 1;
 
 	memset(f, 0, sizeof(*f));
 
@@ -1689,7 +1766,8 @@ cpu_step(struct cpu_context *c)
 		++c->insns;
 		opcode = CPU_READ8(c, f->PC);
 		o = &cpu_opcodes[opcode];
-		//cpu_dumpop(c, o);
+		if (c->debug)
+			cpu_dumpop(c, o);
 		c->delay = o->op(c, o) - o->cycles;
 		c->fetch = 1;
 	}

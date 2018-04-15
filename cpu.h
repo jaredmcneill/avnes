@@ -54,6 +54,8 @@ struct cpu_context {
 	uint64_t ticks;
 
 	int delay, fetch;
+
+	int debug;
 };
 
 int	cpu_init(struct cpu_context *);
