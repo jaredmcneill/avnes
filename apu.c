@@ -377,8 +377,8 @@ apu_pulse_step(struct apu_context *a, struct apu_pulse *ap)
 	ap->seqval = apu_pulse_sequence[ap->duty_cycle][ap->seqno] ?
 	    ap->cur_volume : 0;
 
-	/* Increment sequencer step number */
-	ap->seqno = (ap->seqno + 1) & 0x7;
+	/* Decrement sequencer step number */
+	ap->seqno = (ap->seqno - 1) & 0x7;
 
 	ap->timer_counter = ap->timer;
 }
@@ -393,8 +393,8 @@ apu_triangle_step(struct apu_context *a, struct apu_triangle *at)
 
 	at->seqval = apu_triangle_sequence[at->seqno];
 
-	/* Increment sequencer step number */
-	at->seqno = (at->seqno + 1) & 0x1f;
+	/* Decrement sequencer step number */
+	at->seqno = (at->seqno - 1) & 0x1f;
 
 	at->timer_counter = at->timer + 1;
 }
