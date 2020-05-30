@@ -83,10 +83,11 @@ static const unsigned int audio_pulse_table_len = 31;
 static float audio_tnd_table[203];
 static const unsigned int audio_tnd_table_len = 203;
 
-#define	AUDIO_BUFFER_SAMPLES	65536
+#define	AUDIO_BUFFER_SAMPLES	1024
 
-static float audio_buffer[AUDIO_BUFFER_SAMPLES];
+static int16_t audio_buffer[AUDIO_BUFFER_SAMPLES];
 static int audio_buffer_pos = 0;
+static int audio_ticks = 0;
 
 #if defined(HAVE_LIBDRM)
 static int drm_fd = -1;
@@ -101,9 +102,9 @@ sdl_init_audio(void)
 	SDL_AudioSpec want, have;
 
 	SDL_memset(&want, 0, sizeof(want));
-	//want.freq = 48000;
-	want.freq = 1789773;
-	want.format = AUDIO_F32;
+	want.freq = 48000;
+	//want.freq = 1789773;
+	want.format = AUDIO_S16;
 	want.channels = 1;
 	want.samples = 4096;
 	want.callback = NULL;
@@ -327,6 +328,12 @@ sdl_play(struct apu_context *a)
 	float sample, pulse_out, tnd_out;
 	uint8_t pulse1, pulse2, triangle, noise, dmc;
 
+	/* Sample at 48 kHz (based on 1789773 Hz input) */
+	audio_ticks += 10000000;
+	if (audio_ticks < 372869375)
+		return;
+	audio_ticks -= 372869375;
+
 	sample = 0.0;
 	pulse1 = pulse2 = triangle = noise = dmc = 0;
 
@@ -352,7 +359,12 @@ sdl_play(struct apu_context *a)
 	sample = pulse_out + tnd_out;
 
 	if (audio_buffer_pos < AUDIO_BUFFER_SAMPLES) {
-		audio_buffer[audio_buffer_pos++] = sample;
+		sample *= 32768;
+		if (sample > 32767)
+			sample = 32767;
+		else if (sample < -32768)
+			sample = -32768;
+		audio_buffer[audio_buffer_pos++] = (int16_t)sample;
 	}
 }
 
