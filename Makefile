@@ -16,18 +16,12 @@ SDL_LIBS=	$(shell pkg-config --libs sdl2)
 
 OPSYS=		$(shell uname -s)
 
-ifneq ($(OPSYS),Darwin)
-LIBDRM_CFLAGS=	$(shell pkg-config --cflags libdrm)
-LIBDRM_CFLAGS+=	-DHAVE_LIBDRM
-LIBDRM_LIBS=	$(shell pkg-config --libs libdrm)
-endif
-
-CFLAGS=		$(SDL_CFLAGS) $(LIBDRM_CFLAGS) -g -O2
-LIBS=		$(SDL_LIBS) $(LIBDRM_LIBS)
-
 ifeq ($(OPSYS),Linux)
-CFLAGS+=	-D_GNU_SOURCE
+OS_CFLAGS+=	-D_GNU_SOURCE
 endif
+
+CFLAGS=		$(SDL_CFLAGS) $(OS_CFLAGS) -g -O2
+LIBS=		$(SDL_LIBS)
 
 all: $(PROG)
 

@@ -34,10 +34,6 @@
 
 #include <SDL.h>
 
-#if defined(HAVE_LIBDRM)
-#include <xf86drm.h>
-#endif
-
 #include "io.h"
 #include "apu.h"
 #include "ppu.h"
@@ -91,10 +87,6 @@ static int16_t audio_buffer[AUDIO_BUFFER_SAMPLES];
 static int audio_buffer_pos = 0;
 static int audio_ticks = 0;
 
-#if defined(HAVE_LIBDRM)
-static int drm_fd = -1;
-#endif
-
 static uint32_t frame_counter;
 static uint32_t time_frame0;
 
@@ -127,17 +119,6 @@ sdl_init(const char *filename)
 	int window_width, window_height;
 	int controller_index, i, error;
 	SDL_RendererInfo renderer_info;
-
-#if defined(HAVE_LIBDRM)
-	const char *vsync = getenv("AVNES_VSYNC");
-	if (vsync != NULL && strcasecmp(vsync, "drm") == 0) {
-		drm_fd = open("/dev/dri/card0", O_RDWR);
-		if (drm_fd == -1)
-			printf("DRM not available, using slow vsync method\n");
-		else
-			printf("Using DRM for vsync\n");
-	}
-#endif
 
 	/* Emulate 8:7 PAR */
 	window_width = PPU_WIDTH * 2 * 8 / 7;
@@ -202,7 +183,7 @@ sdl_init(const char *filename)
 		return ENXIO;
 	}
 
-	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC);
 	if (!renderer) {
 		fprintf(stderr, "Couldn't create SDL renderer: %s\n", SDL_GetError());
 		return ENXIO;
@@ -255,44 +236,6 @@ sdl_time_left(void)
 	return timer_next - now;
 }
 
-static void
-sdl_wait_vsync(void)
-{
-#if defined(HAVE_LIBDRM)
-	drmVBlank vbl;
-	int ret;
-#endif
-	uint32_t delay;
-
-	++frame_counter;
-
-#if defined(HAVE_LIBDRM)
-	if (drm_fd >= 0 && sdl_time_left() > 0) {
-		vbl.request.type = DRM_VBLANK_RELATIVE;
-		vbl.request.sequence = 1;
-		ret = drmWaitVBlank(drm_fd, &vbl);
-		if (ret != 0) {
-			fprintf(stderr, "DRM wait for vblank failed (%d), falling back to slow vsync method\n", ret);
-			close(drm_fd);
-			drm_fd = -1;
-		}
-	}
-	if (drm_fd == -1) {
-#endif
-
-#if defined(__APPLE__)
-		while (sdl_time_left() > 0) {
-			pthread_yield_np();
-		}
-#else
-		SDL_Delay(sdl_time_left());
-#endif
-
-#if defined(HAVE_LIBDRM)
-	}
-#endif
-}
-
 void
 sdl_draw(struct ppu_context *p)
 {
@@ -303,8 +246,6 @@ sdl_draw(struct ppu_context *p)
 #endif
 	int pitch;
 	SDL_Rect *src;
-
-	sdl_wait_vsync();
 
 	SDL_RenderClear(renderer);
 
