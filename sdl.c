@@ -296,6 +296,8 @@ sdl_draw(struct ppu_context *p)
 
 	sdl_wait_vsync();
 
+	SDL_RenderClear(renderer);
+
 	SDL_LockTexture(texture, NULL, (void **)&fb, &pitch);
 
 	for (unsigned int y = 0; y < PPU_HEIGHT; y++) {
