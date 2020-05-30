@@ -461,7 +461,9 @@ apu_dmc_step(struct apu_context *a, struct apu_dmc *ad)
 	ad->cur_sample >>= 1;
 	--ad->cur_sample_bits;
 
-	if ((unsigned int)(ad->seqval + delta) <= 0x7f)
+	if (delta > 0 && (unsigned int)(ad->seqval + delta) <= 0x7f)
+		ad->seqval += delta;
+	else if (delta < 0 && ad->seqval >= -delta)
 		ad->seqval += delta;
 
 	ad->timer_counter = ad->timer;
