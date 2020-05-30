@@ -43,6 +43,8 @@
 #include "ppu.h"
 #include "sdl.h"
 
+#define	FB_BITS		32
+
 static uint8_t ntscpalette_pal[] = {
   0x52, 0x52, 0x52, 0x01, 0x1a, 0x51, 0x0f, 0x0f, 0x65, 0x23, 0x06, 0x63,
   0x36, 0x03, 0x4b, 0x40, 0x04, 0x26, 0x3f, 0x09, 0x04, 0x32, 0x13, 0x00,
@@ -215,7 +217,11 @@ sdl_init(const char *filename)
 		return ENXIO;
 	}
 
-	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, PPU_WIDTH, PPU_HEIGHT);
+#if FB_BITS == 16
+	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STREAMING, PPU_WIDTH, PPU_HEIGHT);
+#else
+	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, PPU_WIDTH, PPU_HEIGHT);
+#endif
 	if (!texture) {
 		fprintf(stderr, "Couldn't create SDL texture: %s\n", SDL_GetError());
 		return ENXIO;
@@ -290,7 +296,11 @@ sdl_wait_vsync(void)
 void
 sdl_draw(struct ppu_context *p)
 {
-	uint8_t *fb;
+#if FB_BITS == 16
+	uint16_t *fb;
+#else
+	uint32_t *fb;
+#endif
 	int pitch;
 	SDL_Rect *src;
 
@@ -301,13 +311,19 @@ sdl_draw(struct ppu_context *p)
 	SDL_LockTexture(texture, NULL, (void **)&fb, &pitch);
 
 	for (unsigned int y = 0; y < PPU_HEIGHT; y++) {
-		for (unsigned int x = 0; x < PPU_WIDTH; x++) {
-			struct ppu_pixel *pix = &p->pixels[y][x];
-
-			*fb++ = ntscpalette_pal[(pix->c * 3) + 2];
-			*fb++ = ntscpalette_pal[(pix->c * 3) + 1];
-			*fb++ = ntscpalette_pal[(pix->c * 3) + 0];
-			*fb++ = 0xff;
+		struct ppu_pixel *pix = &p->pixels[y][0];
+		for (unsigned int x = 0; x < PPU_WIDTH; x++, pix++, fb++) {
+			const int palidx = pix->c * 3;
+#if FB_BITS == 16
+			*fb = ((ntscpalette_pal[palidx + 2] >> 3) << 0) |
+			      ((ntscpalette_pal[palidx + 1] >> 2) << 5) |
+			      ((ntscpalette_pal[palidx + 0] >> 3) << 11);
+#else
+			*fb = (ntscpalette_pal[palidx + 2] << 0) |
+			      (ntscpalette_pal[palidx + 1] << 8) |
+			      (ntscpalette_pal[palidx + 0] << 16) |
+			      (0xff << 24);
+#endif
 		}
 	}
 
