@@ -83,8 +83,9 @@ static const unsigned int audio_pulse_table_len = 31;
 static float audio_tnd_table[203];
 static const unsigned int audio_tnd_table_len = 203;
 
-static const int audio_buffer_len = 65536;
-static float audio_buffer[audio_buffer_len];
+#define	AUDIO_BUFFER_SAMPLES	65536
+
+static float audio_buffer[AUDIO_BUFFER_SAMPLES];
 static int audio_buffer_pos = 0;
 
 #if defined(HAVE_LIBDRM)
@@ -350,7 +351,7 @@ sdl_play(struct apu_context *a)
 
 	sample = pulse_out + tnd_out;
 
-	if (audio_buffer_pos < audio_buffer_len) {
+	if (audio_buffer_pos < AUDIO_BUFFER_SAMPLES) {
 		audio_buffer[audio_buffer_pos++] = sample;
 	}
 }

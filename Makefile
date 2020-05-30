@@ -22,8 +22,12 @@ LIBDRM_CFLAGS+=	-DHAVE_LIBDRM
 LIBDRM_LIBS=	$(shell pkg-config --libs libdrm)
 endif
 
-CFLAGS=	$(SDL_CFLAGS) $(LIBDRM_CFLAGS) -g -O2
-LIBS=	$(SDL_LIBS) $(LIBDRM_LIBS)
+CFLAGS=		$(SDL_CFLAGS) $(LIBDRM_CFLAGS) -g -O2
+LIBS=		$(SDL_LIBS) $(LIBDRM_LIBS)
+
+ifeq ($(OPSYS),Linux)
+CFLAGS+=	-D_GNU_SOURCE
+endif
 
 all: $(PROG)
 
