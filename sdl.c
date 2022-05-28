@@ -76,16 +76,15 @@ static int overscan = 0;
 static SDL_Rect rect_overscan = { .x = 8, .y = 8, .w = PPU_WIDTH - 16, .h = PPU_HEIGHT - 16 };
 
 static SDL_AudioDeviceID audiodev;
+static SDL_AudioCVT audiocvt;
 static float audio_pulse_table[31];
 static const unsigned int audio_pulse_table_len = 31;
 static float audio_tnd_table[203];
 static const unsigned int audio_tnd_table_len = 203;
 
-#define	AUDIO_BUFFER_SAMPLES	1024
-
-static int16_t audio_buffer[AUDIO_BUFFER_SAMPLES];
-static int audio_buffer_pos = 0;
-static int audio_ticks = 0;
+static float *audio_buffer;
+static unsigned audio_buffer_pos;
+static unsigned audio_buffer_samples;
 
 static uint32_t frame_counter;
 static uint32_t time_frame0;
@@ -97,19 +96,25 @@ sdl_init_audio(void)
 
 	SDL_memset(&want, 0, sizeof(want));
 	want.freq = 48000;
-	//want.freq = 1789773;
 	want.format = AUDIO_S16;
 	want.channels = 1;
 	want.samples = 4096;
 	want.callback = NULL;
 
-	audiodev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+	audiodev = SDL_OpenAudioDevice(NULL, 0, &want, &have, SDL_AUDIO_ALLOW_ANY_CHANGE);
 	if (audiodev == 0) {
 		SDL_Log("Failed to open audio: %s", SDL_GetError());
 		return;
 	}
 
 	SDL_PauseAudioDevice(audiodev, 0);
+
+	SDL_BuildAudioCVT(&audiocvt, AUDIO_F32, 1, 1789773, have.format, have.channels, have.freq);
+	SDL_assert(audiocvt.needed);
+	audiocvt.len = 131072;
+	audio_buffer = SDL_malloc(audiocvt.len * audiocvt.len_mult);
+	SDL_assert(audio_buffer != NULL);
+	audio_buffer_samples = audiocvt.len * audiocvt.len_mult / sizeof(*audio_buffer);
 }
 
 int
@@ -271,7 +276,11 @@ sdl_draw(struct ppu_context *p)
 	SDL_UnlockTexture(texture);
 
 	if (audio_buffer_pos > 0) {
-		SDL_QueueAudio(audiodev, audio_buffer, audio_buffer_pos * sizeof(audio_buffer[0]));
+		audiocvt.len = audio_buffer_pos * sizeof(*audio_buffer);
+		audiocvt.buf = (Uint8 *)audio_buffer;
+		SDL_ConvertAudio(&audiocvt);
+
+		SDL_QueueAudio(audiodev, audiocvt.buf, audiocvt.len_cvt);
 		audio_buffer_pos = 0;
 	}
 
@@ -286,12 +295,6 @@ sdl_play(struct apu_context *a)
 {
 	float sample, pulse_out, tnd_out;
 	uint8_t pulse1, pulse2, triangle, noise, dmc;
-
-	/* Sample at 48 kHz (based on 1789773 Hz input) */
-	audio_ticks += 10000000;
-	if (audio_ticks < 372869375)
-		return;
-	audio_ticks -= 372869375;
 
 	sample = 0.0;
 	pulse1 = pulse2 = triangle = noise = dmc = 0;
@@ -317,13 +320,8 @@ sdl_play(struct apu_context *a)
 
 	sample = pulse_out + tnd_out;
 
-	if (audio_buffer_pos < AUDIO_BUFFER_SAMPLES) {
-		sample *= 32768;
-		if (sample > 32767)
-			sample = 32767;
-		else if (sample < -32768)
-			sample = -32768;
-		audio_buffer[audio_buffer_pos++] = (int16_t)sample;
+	if (audio_buffer_pos < audio_buffer_samples) {
+		audio_buffer[audio_buffer_pos++] = sample;
 	}
 }
 
