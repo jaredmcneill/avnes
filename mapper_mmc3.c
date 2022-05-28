@@ -100,7 +100,7 @@ mmc3_cpuread(struct avnes_context *av, uint16_t addr)
 	}
 
 	if (addr >= 0x8000 && addr <= 0xFFFF) {
-		return av->rom_data[av->prg_start + mmc3_cpuaddr2romoffset(av, addr)];
+		return av->rom_data[av->prg_start + (mmc3_cpuaddr2romoffset(av, addr) % av->prg_len)];
 	}
 
 	printf("[%s] CPU address $%04X not mapped\n", __func__, addr);
