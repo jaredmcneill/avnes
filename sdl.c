@@ -124,6 +124,7 @@ sdl_init(const char *filename)
 	int window_width, window_height;
 	int controller_index, i, error;
 	SDL_RendererInfo renderer_info;
+	Uint32 flags;
 
 	/* Emulate 8:7 PAR */
 	window_width = PPU_WIDTH * 2 * 8 / 7;
@@ -179,10 +180,16 @@ sdl_init(const char *filename)
 		return ENOMEM;
 	}
 
+	flags = SDL_WINDOW_SHOWN;
+	if (SDL_getenv("FULLSCREEN") && *SDL_getenv("FULLSCREEN") == '1') {
+		flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+		fullscreen = 1;
+		SDL_ShowCursor(SDL_DISABLE);
+	}
 	window = SDL_CreateWindow(window_title,
 	    SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 	    window_width, window_height,
-	    SDL_WINDOW_SHOWN);
+	    flags);
 	if (!window) {
 		fprintf(stderr, "Couldn't create SDL window: %s\n", SDL_GetError());
 		return ENXIO;
