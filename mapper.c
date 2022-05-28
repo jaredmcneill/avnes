@@ -32,6 +32,7 @@
 
 extern struct mapper_impl MAPPER_IMPL(axrom);
 extern struct mapper_impl MAPPER_IMPL(cnrom);
+extern struct mapper_impl MAPPER_IMPL(colordreams);
 extern struct mapper_impl MAPPER_IMPL(gxrom);
 extern struct mapper_impl MAPPER_IMPL(mmc1);
 extern struct mapper_impl MAPPER_IMPL(mmc2);
@@ -47,6 +48,7 @@ static struct mapper_impl *mappers[] = {
 	[4] = &MAPPER_IMPL(mmc3),
 	[7] = &MAPPER_IMPL(axrom),
 	[9] = &MAPPER_IMPL(mmc2),
+	[11] = &MAPPER_IMPL(colordreams),
 	[66] = &MAPPER_IMPL(gxrom),
 };
 
